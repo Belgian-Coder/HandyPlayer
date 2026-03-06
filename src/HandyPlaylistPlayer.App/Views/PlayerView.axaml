@@ -1,0 +1,358 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HandyPlaylistPlayer.App.ViewModels"
+             xmlns:mpv="using:HandyPlaylistPlayer.Media.Mpv"
+             xmlns:views="using:HandyPlaylistPlayer.App.Views"
+             xmlns:controls="using:HandyPlaylistPlayer.App.Controls"
+             xmlns:converters="using:HandyPlaylistPlayer.App.Converters"
+             x:Class="HandyPlaylistPlayer.App.Views.PlayerView"
+             x:DataType="vm:PlayerViewModel">
+    <DockPanel>
+        <!-- Error bar — expandable, copyable, animated -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource ErrorBgBrush}" Padding="8,4"
+                Classes="error-slide"
+                Classes.open="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding ErrorText}" Foreground="{DynamicResource ErrorFgBrush}"
+                           FontSize="{StaticResource FontSizeBody}" TextWrapping="Wrap" VerticalAlignment="Center"
+                           MaxLines="5" />
+                <Button Grid.Column="1" Content="Copy" FontSize="{StaticResource FontSizeCaption}" Margin="8,0,4,0"
+                        x:Name="CopyErrorButton" Click="OnCopyErrorClick" />
+                <Button Grid.Column="2" Content="X" FontSize="{StaticResource FontSizeCaption}"
+                        Command="{Binding DismissErrorCommand}" />
+            </Grid>
+        </Border>
+
+        <!-- Hot zone at bottom — thin strip to trigger control show on mouse hover in fullscreen -->
+        <Border DockPanel.Dock="Bottom" Height="8" Background="Transparent"
+                IsVisible="{Binding IsFullscreen}" />
+
+        <!-- Bottom bar — hidden in fullscreen -->
+        <Border DockPanel.Dock="Bottom" Padding="8,4,8,6"
+                IsVisible="{Binding !IsFullscreen}">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                    <Button Command="{Binding OpenVideoCommand}"
+                            CommandParameter="{Binding $parent[Window]}"
+                            Content="Open Video" ToolTip.Tip="Open a video file" />
+                    <Button Command="{Binding OpenScriptCommand}"
+                            CommandParameter="{Binding $parent[Window]}"
+                            Content="Open Script" ToolTip.Tip="Open a funscript file" />
+                    <TextBlock Text="|" VerticalAlignment="Center" Opacity="0.3" Margin="4,0" />
+                    <Button Command="{Binding ConnectDeviceCommand}" Content="Connect"
+                            Classes="btn-primary"
+                            IsVisible="{Binding !IsDeviceConnected}"
+                            ToolTip.Tip="Connect to device" />
+                    <Button Command="{Binding DisconnectDeviceCommand}" Content="Disconnect"
+                            IsVisible="{Binding IsDeviceConnected}"
+                            ToolTip.Tip="Disconnect from device" />
+                    <Border Classes="pulse-connecting" IsVisible="{Binding IsConnecting}">
+                        <ProgressBar Width="60" Height="4"
+                                     IsIndeterminate="True" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="{Binding DeviceStatus}" VerticalAlignment="Center" FontSize="{StaticResource FontSizeSmall}" />
+                    <Ellipse Width="8" Height="8" Margin="4,0"
+                             Fill="{Binding ConnectionQualityColor, Converter={x:Static converters:ColorToBrushConverter.Instance}}"
+                             IsVisible="{Binding IsDeviceConnected}"
+                             VerticalAlignment="Center"
+                             ToolTip.Tip="{Binding ConnectionHealthText}" />
+                    <TextBlock Text="{Binding ConnectionHealthText}" VerticalAlignment="Center"
+                               FontSize="{StaticResource FontSizeCaption}" Opacity="0.6"
+                               IsVisible="{Binding ConnectionHealthText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+                <Button Grid.Column="1" Command="{Binding EmergencyStopActionCommand}"
+                        Classes="btn-danger" Content="EMERGENCY STOP" MinWidth="130"
+                        ToolTip.Tip="Emergency Stop (Escape)" />
+            </Grid>
+        </Border>
+
+        <!-- Override Controls — docked above bottom bar -->
+        <views:OverrideControlsView DockPanel.Dock="Bottom"
+                                     DataContext="{Binding OverrideControls}"
+                                     Margin="8,0,8,0" />
+
+        <!-- Main content: Video + Queue (right side) -->
+        <Grid x:Name="ContentGrid">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="300" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="260" MinWidth="160" MaxWidth="600" />
+            </Grid.ColumnDefinitions>
+            <!-- Left: Video + Controls -->
+            <Grid Grid.Column="0" RowDefinitions="*,Auto">
+                <!-- Video Area -->
+                <Grid Grid.Row="0" x:Name="VideoArea">
+                    <Border x:Name="VideoBorder" Background="Black" CornerRadius="{StaticResource RadiusMd}" ClipToBounds="True">
+                        <Border.Transitions>
+                            <Transitions>
+                                <CornerRadiusTransition Property="CornerRadius" Duration="0:0:0.3" Easing="CubicEaseInOut" />
+                            </Transitions>
+                        </Border.Transitions>
+                        <Grid ColumnDefinitions="Auto,*">
+                            <!-- Script position visualizer strip — Auto column collapses when hidden -->
+                            <Border Grid.Column="0" Width="28" Background="{DynamicResource SurfaceBrush}"
+                                    IsVisible="{Binding ShowScriptVisualizer}"
+                                    ClipToBounds="True">
+                                <Canvas x:Name="VisualizerCanvas">
+                                    <Border x:Name="VisualizerDot"
+                                            Width="18" Height="18" CornerRadius="9"
+                                            Background="{DynamicResource AccentBrush}"
+                                            Canvas.Left="5" Canvas.Top="0" />
+                                </Canvas>
+                            </Border>
+                            <!-- Video -->
+                            <Panel Grid.Column="1" x:Name="VideoContainer" Background="Transparent"
+                                   IsVisible="{Binding IsVideoVisible}" />
+                        </Grid>
+                    </Border>
+                    <TextBlock Text="{Binding StatusText}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource PlaceholderTextBrush}" FontSize="{StaticResource FontSizeTitle}"
+                               IsHitTestVisible="False" />
+                </Grid>
+
+                <!-- Transport Controls — smooth auto-hide in fullscreen -->
+                <StackPanel Grid.Row="1" Margin="8,2,8,2" Spacing="2"
+                            x:Name="TransportControls" ClipToBounds="True">
+                    <StackPanel.Transitions>
+                        <Transitions>
+                            <DoubleTransition Property="Opacity" Duration="0:0:0.3" Easing="CubicEaseInOut" />
+                        </Transitions>
+                    </StackPanel.Transitions>
+                    <Grid>
+                        <Slider x:Name="SeekSlider" Classes="seek-slider" Minimum="0"
+                                Maximum="{Binding SeekMaximum}"
+                                Value="{Binding SeekPosition}"
+                                Focusable="False"
+                                SmallChange="1000" LargeChange="5000" />
+                        <!-- A-B Loop markers overlaying the seekbar -->
+                        <Canvas x:Name="LoopMarkerCanvas" IsHitTestVisible="False" Margin="10,0,10,0">
+                            <Rectangle x:Name="LoopRegionRect" Height="20" Fill="#50FFC800"
+                                       Canvas.Top="0" IsVisible="False" />
+                            <Rectangle x:Name="LoopMarkerA" Width="3" Height="20" Fill="#FFFFC800"
+                                       Canvas.Top="0" IsVisible="False" />
+                            <Rectangle x:Name="LoopMarkerB" Width="3" Height="20" Fill="#FFFFC800"
+                                       Canvas.Top="0" IsVisible="False" />
+                        </Canvas>
+                        <!-- Seek preview tooltip shown during drag -->
+                        <Border x:Name="SeekPreviewBorder" Background="{DynamicResource OverlayDarkBrush}"
+                                CornerRadius="{StaticResource RadiusSm}" Padding="6,2"
+                                HorizontalAlignment="Left" VerticalAlignment="Top"
+                                Margin="0,-24,0,0" IsVisible="False" IsHitTestVisible="False">
+                            <TextBlock Text="{Binding SeekPreviewText}"
+                                       FontSize="{StaticResource FontSizeSmall}" Foreground="White" />
+                        </Border>
+                    </Grid>
+
+                    <!-- Funscript heatmap — hidden in fullscreen to save space -->
+                    <controls:FunscriptHeatmap Height="12" Margin="8,0,8,0"
+                                               Script="{Binding CurrentScript}"
+                                               Position="{Binding SeekPosition}"
+                                               Maximum="{Binding SeekMaximum}"
+                                               LoopStart="{Binding LoopStartMs}"
+                                               LoopEnd="{Binding LoopEndMs}"
+                                               IsVisible="{Binding !IsFullscreen}" />
+
+                    <!-- EQ panel — shown above transport when toggled -->
+                    <StackPanel IsVisible="{Binding ShowEqualizer}" Orientation="Horizontal" Spacing="6" Margin="4,0">
+                        <TextBlock Text="B" VerticalAlignment="Center" ToolTip.Tip="Brightness" FontSize="{StaticResource FontSizeCaption}" />
+                        <Slider Value="{Binding Brightness}" Minimum="-100" Maximum="100" Width="80" VerticalAlignment="Center" />
+                        <TextBlock Text="C" VerticalAlignment="Center" ToolTip.Tip="Contrast" FontSize="{StaticResource FontSizeCaption}" />
+                        <Slider Value="{Binding Contrast}" Minimum="-100" Maximum="100" Width="80" VerticalAlignment="Center" />
+                        <TextBlock Text="S" VerticalAlignment="Center" ToolTip.Tip="Saturation" FontSize="{StaticResource FontSizeCaption}" />
+                        <Slider Value="{Binding Saturation}" Minimum="-100" Maximum="100" Width="80" VerticalAlignment="Center" />
+                        <TextBlock Text="γ" VerticalAlignment="Center" ToolTip.Tip="Gamma" FontSize="{StaticResource FontSizeCaption}" />
+                        <Slider Value="{Binding Gamma}" Minimum="-100" Maximum="100" Width="80" VerticalAlignment="Center" />
+                        <TextBlock Text="H" VerticalAlignment="Center" ToolTip.Tip="Hue" FontSize="{StaticResource FontSizeCaption}" />
+                        <Slider Value="{Binding Hue}" Minimum="-100" Maximum="100" Width="80" VerticalAlignment="Center" />
+                        <Button Content="Reset" Command="{Binding ResetEqualizerCommand}" Padding="6,2"
+                                FontSize="{StaticResource FontSizeCaption}" />
+                    </StackPanel>
+
+                    <!-- Tracks panel — shown above transport when toggled -->
+                    <StackPanel IsVisible="{Binding ShowTracks}" Orientation="Horizontal" Spacing="8" Margin="4,0">
+                        <TextBlock Text="Audio" VerticalAlignment="Center" FontSize="{StaticResource FontSizeCaption}" />
+                        <ComboBox ItemsSource="{Binding AudioTracks}"
+                                  SelectedItem="{Binding SelectedAudioTrack}"
+                                  Width="160" FontSize="{StaticResource FontSizeSmall}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="mpv:MpvTrack">
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Text="Sub" VerticalAlignment="Center" FontSize="{StaticResource FontSizeCaption}" />
+                        <ComboBox ItemsSource="{Binding SubtitleTracks}"
+                                  SelectedItem="{Binding SelectedSubtitleTrack}"
+                                  Width="160" FontSize="{StaticResource FontSizeSmall}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="mpv:MpvTrack">
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                        <!-- Previous -->
+                        <Button Grid.Column="0" Command="{Binding PreviousTrackCommand}"
+                                Padding="8,6" Margin="0,0,2,0" ToolTip.Tip="Previous Track"
+                                IsVisible="{Binding ShowNavButtons}">
+                            <PathIcon Data="M6 6h2v12H6zm3.5 6l8.5 6V6z" Width="14" Height="14" />
+                        </Button>
+                        <!-- Seek Backward -->
+                        <Button Grid.Column="1" Command="{Binding SeekBackwardCommand}"
+                                Padding="8,6" Margin="0,0,2,0"
+                                IsVisible="{Binding ShowNavButtons}"
+                                ToolTip.Tip="Seek Backward">
+                            <PathIcon Data="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z" Width="14" Height="14" />
+                        </Button>
+                        <!-- Play / Pause -->
+                        <Button Grid.Column="2" Command="{Binding PlayPauseCommand}"
+                                Padding="10,6" Margin="0,0,2,0"
+                                ToolTip.Tip="Play / Pause">
+                            <Panel>
+                                <PathIcon Data="M8 5v14l11-7z" Width="16" Height="16"
+                                          IsVisible="{Binding !IsPlaying}" />
+                                <PathIcon Data="M6 19h4V5H6v14zm8-14v14h4V5h-4z" Width="16" Height="16"
+                                          IsVisible="{Binding IsPlaying}" />
+                            </Panel>
+                        </Button>
+                        <!-- Seek Forward -->
+                        <Button Grid.Column="3" Command="{Binding SeekForwardCommand}"
+                                Padding="8,6" Margin="0,0,2,0"
+                                IsVisible="{Binding ShowNavButtons}"
+                                ToolTip.Tip="Seek Forward">
+                            <PathIcon Data="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" Width="14" Height="14" />
+                        </Button>
+                        <!-- Next -->
+                        <Button Grid.Column="4" Command="{Binding NextTrackCommand}"
+                                Padding="8,6" Margin="0,0,4,0" ToolTip.Tip="Next Track"
+                                IsVisible="{Binding ShowNavButtons}">
+                            <PathIcon Data="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" Width="14" Height="14" />
+                        </Button>
+                        <!-- Fullscreen toggle -->
+                        <Button Grid.Column="5" Padding="8,6" Margin="0,0,2,0"
+                                Click="OnFullscreenButtonClick"
+                                IsVisible="{Binding ShowFullscreenBtn}"
+                                ToolTip.Tip="Toggle Fullscreen">
+                            <Panel>
+                                <PathIcon Data="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"
+                                          Width="14" Height="14" IsVisible="{Binding !IsFullscreen}" />
+                                <PathIcon Data="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"
+                                          Width="14" Height="14" IsVisible="{Binding IsFullscreen}" />
+                            </Panel>
+                        </Button>
+                        <!-- Device to Bottom + Pause -->
+                        <Button Grid.Column="6" Command="{Binding MoveToBottomAndPauseCommand}"
+                                Padding="8,6" Margin="0,0,2,0"
+                                IsVisible="{Binding IsDeviceConnected}"
+                                ToolTip.Tip="Pause and move device to bottom">
+                            <PathIcon Data="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"
+                                      Width="14" Height="14" />
+                        </Button>
+                        <!-- A-B Loop controls -->
+                        <StackPanel Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0"
+                                    IsVisible="{Binding ShowAbLoopButtons}">
+                            <Button Command="{Binding SetLoopACommand}" Content="A" Padding="6,4"
+                                    FontSize="{StaticResource FontSizeCaption}" FontWeight="Bold"
+                                    ToolTip.Tip="Set Loop Start ([)" />
+                            <Button Command="{Binding SetLoopBCommand}" Content="B" Padding="6,4" Margin="2,0"
+                                    FontSize="{StaticResource FontSizeCaption}" FontWeight="Bold"
+                                    ToolTip.Tip="Set Loop End (])" />
+                            <Button Command="{Binding ClearLoopCommand}" Content="X" Padding="6,4"
+                                    FontSize="{StaticResource FontSizeCaption}"
+                                    IsVisible="{Binding LoopStartMs, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                    ToolTip.Tip="Clear Loop (\)" />
+                            <TextBlock Text="{Binding LoopStatusText}" VerticalAlignment="Center"
+                                       FontSize="{StaticResource FontSizeCaption}" Opacity="0.7" Margin="6,0,0,0"
+                                       IsVisible="{Binding LoopStatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            <!-- Script visualizer toggle — only when a script is loaded -->
+                            <TextBlock Text="|" VerticalAlignment="Center" Opacity="0.3" Margin="6,0"
+                                       IsVisible="{Binding CurrentScript, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                            <Button Padding="6,4"
+                                    Command="{Binding ToggleScriptVisualizerCommand}"
+                                    IsVisible="{Binding CurrentScript, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                    ToolTip.Tip="Toggle Script Visualizer">
+                                <!-- Trend line / movement icon -->
+                                <PathIcon Data="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"
+                                          Width="14" Height="14" />
+                            </Button>
+                        </StackPanel>
+                        <!-- Time Display -->
+                        <TextBlock Grid.Column="8" Text="{Binding TimeDisplay}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <!-- Speed control: [−] 1× [+] -->
+                        <StackPanel Grid.Column="9" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Spacing="1" Margin="6,0,4,0"
+                                    IsVisible="{Binding ShowSpeedControls}">
+                            <Button Content="−" Padding="5,3" FontSize="11" FontWeight="Bold"
+                                    Command="{Binding DecreaseSpeedCommand}"
+                                    ToolTip.Tip="Decrease Speed" />
+                            <TextBlock Text="{Binding SpeedDisplay}" FontSize="11" Width="34"
+                                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                                       TextAlignment="Center" ToolTip.Tip="Playback Speed" />
+                            <Button Content="+" Padding="5,3" FontSize="11" FontWeight="Bold"
+                                    Command="{Binding IncreaseSpeedCommand}"
+                                    ToolTip.Tip="Increase Speed" />
+                        </StackPanel>
+                        <!-- Queue toggle -->
+                        <Button Grid.Column="10" Padding="8,6" Margin="0,0,2,0"
+                                Command="{Binding QueuePanel.TogglePanelCommand}"
+                                IsVisible="{Binding ShowQueueButton}"
+                                ToolTip.Tip="Toggle Queue">
+                            <PathIcon Data="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"
+                                      Width="14" Height="14" />
+                        </Button>
+                        <!-- Overrides -->
+                        <Button Grid.Column="11" Padding="8,6" Margin="0,0,2,0"
+                                Command="{Binding OverrideControls.TogglePanelCommand}"
+                                IsVisible="{Binding ShowOverridesBtn}"
+                                ToolTip.Tip="Toggle Overrides">
+                            <PathIcon Data="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"
+                                      Width="14" Height="14" />
+                        </Button>
+                        <!-- EQ toggle -->
+                        <Button Grid.Column="12" Padding="8,6" Margin="0,0,2,0"
+                                Command="{Binding ToggleEqualizerCommand}"
+                                IsVisible="{Binding ShowEqButton}"
+                                ToolTip.Tip="Toggle Video Equalizer">
+                            <TextBlock Text="EQ" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </Button>
+                        <!-- Tracks toggle -->
+                        <Button Grid.Column="13" Padding="8,6" Margin="0,0,4,0"
+                                Command="{Binding ToggleTracksCommand}"
+                                IsVisible="{Binding ShowTracksButton}"
+                                ToolTip.Tip="Select Audio / Subtitle Track">
+                            <PathIcon Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"
+                                      Width="14" Height="14" />
+                        </Button>
+                        <!-- Volume icon -->
+                        <PathIcon Grid.Column="14" VerticalAlignment="Center" Margin="0,0,4,0"
+                                  Data="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02z"
+                                  Width="14" Height="14" Opacity="0.6"
+                                  IsVisible="{Binding ShowVolumeControl}" />
+                        <!-- Volume slider -->
+                        <Slider Grid.Column="15" Minimum="0" Maximum="1"
+                                Value="{Binding Volume}" Width="80" VerticalAlignment="Center"
+                                IsVisible="{Binding ShowVolumeControl}" />
+                    </Grid>
+                </StackPanel>
+            </Grid>
+
+            <!-- Drag handle to resize queue -->
+            <GridSplitter Grid.Column="1"
+                          Width="4" HorizontalAlignment="Stretch"
+                          Cursor="SizeWestEast" Background="Transparent"
+                          IsVisible="{Binding IsQueueVisible}" />
+
+            <!-- Right: Queue panel (always right side, both fullscreen and normal) -->
+            <views:QueuePanelView Grid.Column="2"
+                                  DataContext="{Binding QueuePanel}"
+                                  Margin="0,4,4,4"
+                                  IsVisible="{Binding IsVisible}"
+                                  x:CompileBindings="False" />
+        </Grid>
+    </DockPanel>
+</UserControl>

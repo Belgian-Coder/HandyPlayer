@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="21.2.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <!-- Avalonia types needed for AccentColors + resource-dictionary tests.
+         Headless.XUnit is intentionally excluded: it ships xunit.core v2 which
+         conflicts with xunit.v3. Resource tests use AvaloniaTestFixture instead. -->
+    <PackageReference Include="Avalonia" Version="11.2.7" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.7" />
+    <PackageReference Include="Avalonia.Headless" Version="11.2.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HandyPlaylistPlayer.Core\HandyPlaylistPlayer.Core.csproj" />
+    <ProjectReference Include="..\..\src\HandyPlaylistPlayer.Devices.HandyApi\HandyPlaylistPlayer.Devices.HandyApi.csproj" />
+    <ProjectReference Include="..\..\src\HandyPlaylistPlayer.Devices.Intiface\HandyPlaylistPlayer.Devices.Intiface.csproj" />
+    <ProjectReference Include="..\..\src\HandyPlaylistPlayer.Storage\HandyPlaylistPlayer.Storage.csproj" />
+    <ProjectReference Include="..\..\src\HandyPlaylistPlayer.App\HandyPlaylistPlayer.App.csproj" />
+    <ProjectReference Include="..\..\src\HandyPlaylistPlayer.Media.Mpv\HandyPlaylistPlayer.Media.Mpv.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Buttplug" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HandyPlaylistPlayer.Core\HandyPlaylistPlayer.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,81 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HandyPlaylistPlayer.App.ViewModels"
+             x:Class="HandyPlaylistPlayer.App.Views.PatternModeView"
+             x:DataType="vm:PatternModeViewModel">
+    <ScrollViewer Margin="16">
+        <StackPanel Spacing="16" MaxWidth="500">
+            <TextBlock Text="Pattern Mode" FontSize="{StaticResource FontSizeDisplay}" FontWeight="Bold" />
+            <TextBlock Text="{Binding StatusText}" Opacity="0.7" />
+
+            <!-- Pattern Type -->
+            <StackPanel Spacing="4">
+                <TextBlock Text="Pattern" FontSize="{StaticResource FontSizeBody}" />
+                <ComboBox ItemsSource="{Binding AvailablePatterns}"
+                          SelectedItem="{Binding SelectedPattern}" Width="200" />
+            </StackPanel>
+
+            <!-- Frequency -->
+            <StackPanel Spacing="4">
+                <TextBlock FontSize="{StaticResource FontSizeBody}">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="{}Frequency: {0:F1} Hz">
+                            <Binding Path="Frequency" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+                <Slider Minimum="0.1" Maximum="5.0" Value="{Binding Frequency}"
+                        SmallChange="0.1" LargeChange="0.5" />
+            </StackPanel>
+
+            <!-- Amplitude Range -->
+            <StackPanel Spacing="4">
+                <TextBlock Text="Amplitude Range" FontSize="{StaticResource FontSizeBody}" />
+                <Grid ColumnDefinitions="Auto,*,Auto,*,Auto">
+                    <TextBlock Text="Min:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="100"
+                            Value="{Binding AmplitudeMin}" />
+                    <TextBlock Grid.Column="2" Text="Max:" VerticalAlignment="Center" Margin="8,0,4,0" />
+                    <Slider Grid.Column="3" Minimum="0" Maximum="100"
+                            Value="{Binding AmplitudeMax}" />
+                    <TextBlock Grid.Column="4" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="{StaticResource FontSizeSmall}">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="{}{0}-{1}">
+                                <Binding Path="AmplitudeMin" />
+                                <Binding Path="AmplitudeMax" />
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </Grid>
+            </StackPanel>
+
+            <!-- Duration -->
+            <StackPanel Spacing="4">
+                <TextBlock FontSize="{StaticResource FontSizeBody}">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="{}Duration: {0} seconds">
+                            <Binding Path="DurationSeconds" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+                <Slider Minimum="10" Maximum="600" Value="{Binding DurationSeconds}"
+                        SmallChange="10" LargeChange="60" />
+            </StackPanel>
+
+            <!-- Seed (optional) -->
+            <StackPanel Spacing="4">
+                <TextBlock Text="Seed (optional — for reproducible random patterns)" FontSize="{StaticResource FontSizeBody}" />
+                <TextBox Text="{Binding SeedText}" Watermark="Leave empty for random"
+                         Width="200" HorizontalAlignment="Left" />
+            </StackPanel>
+
+            <!-- Controls -->
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Play Pattern" Command="{Binding PlayPatternCommand}"
+                        IsVisible="{Binding !IsPlaying}" MinWidth="120" />
+                <Button Content="Stop" Command="{Binding StopPatternCommand}"
+                        IsVisible="{Binding IsPlaying}" MinWidth="120" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,467 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HandyPlaylistPlayer.App.ViewModels"
+             xmlns:m="using:HandyPlaylistPlayer.Core.Models"
+             x:Class="HandyPlaylistPlayer.App.Views.LibraryView"
+             xmlns:controls="using:HandyPlaylistPlayer.App.Controls"
+             x:DataType="vm:LibraryViewModel">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto" Margin="16">
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+            <TextBlock Text="{Binding StatusText}" FontSize="{StaticResource FontSizeHeading}" FontWeight="Bold"
+                       VerticalAlignment="Center" />
+            <Button Command="{Binding ScanAllCommand}" Content="Scan All"
+                    IsEnabled="{Binding !IsScanning}" />
+            <ProgressBar Width="80" Height="4" IsVisible="{Binding IsScanning}"
+                         IsIndeterminate="True" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding ScanStatus}" VerticalAlignment="Center"
+                       FontSize="{StaticResource FontSizeBody}" Opacity="0.7" />
+            <TextBlock Text="{Binding LastSyncText}" VerticalAlignment="Center"
+                       FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" Margin="8,0,0,0" />
+            <!-- Grid/List toggle -->
+            <ToggleButton IsChecked="{Binding IsGridView}" ToolTip.Tip="Toggle Grid/List view" Padding="6,4">
+                <Panel>
+                    <PathIcon Data="M3 3h7v7H3V3zm11 0h7v7h-7V3zM3 14h7v7H3v-7zm11 0h7v7h-7v-7z"
+                              Width="14" Height="14" IsVisible="{Binding IsGridView}" />
+                    <PathIcon Data="M3 4h18v2H3V4zm0 5h18v2H3V9zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"
+                              Width="14" Height="14" IsVisible="{Binding !IsGridView}" />
+                </Panel>
+            </ToggleButton>
+            <!-- Card size buttons (grid view only) -->
+            <Button Content="−" Padding="6,4" FontSize="14"
+                    Command="{Binding ShrinkCardsCommand}"
+                    IsVisible="{Binding IsGridView}"
+                    ToolTip.Tip="Smaller cards" />
+            <Button Content="+" Padding="6,4" FontSize="14"
+                    Command="{Binding GrowCardsCommand}"
+                    IsVisible="{Binding IsGridView}"
+                    ToolTip.Tip="Larger cards" />
+        </StackPanel>
+
+        <!-- Search + Add Folder -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+            <Grid Grid.Column="0" ColumnDefinitions="*,Auto" Margin="0,0,8,0">
+                <TextBox Grid.Column="0" Text="{Binding SearchText}" Watermark="Search library..." />
+                <Button Grid.Column="1" Content="✕" Padding="6,0" Margin="4,0,0,0"
+                        Command="{Binding ClearSearchCommand}"
+                        IsVisible="{Binding SearchText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                        ToolTip.Tip="Clear search" />
+            </Grid>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                <Button Content="Find Duplicates"
+                        Command="{Binding FindDuplicatesCommand}"
+                        IsEnabled="{Binding !IsDuplicateScan}" />
+                <Button Command="{Binding ShowMissingFilesPanelCommand}"
+                        IsVisible="{Binding MissingCount}"
+                        ToolTip.Tip="Show files that can no longer be found on disk">
+                    <Button.Content>
+                        <TextBlock>
+                            <Run Text="Fix Missing (" /><Run Text="{Binding MissingCount}" /><Run Text=")" />
+                        </TextBlock>
+                    </Button.Content>
+                </Button>
+                <Button Content="Add Folder"
+                        Command="{Binding AddRootCommand}"
+                        CommandParameter="{Binding $parent[Window]}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Library roots strip -->
+        <ItemsControl Grid.Row="2" ItemsSource="{Binding Roots}" Margin="0,0,0,4">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="m:LibraryRoot">
+                    <Border Padding="6,2" Margin="0,0,4,4" CornerRadius="{StaticResource RadiusSm}"
+                            Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{Binding Path}" FontSize="{StaticResource FontSizeSmall}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding Status}" FontSize="{StaticResource FontSizeSmall}" Opacity="0.6"
+                                       VerticalAlignment="Center" />
+                            <Button Content="x" FontSize="{StaticResource FontSizeCaption}" Padding="4,0"
+                                    VerticalAlignment="Center" MinWidth="0" MinHeight="0"
+                                    Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).RemoveRootCommand}"
+                                    CommandParameter="{Binding}" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Bulk action bar — animated -->
+        <Border Grid.Row="3"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                Padding="8,4" CornerRadius="{StaticResource RadiusMd}" Margin="0,0,0,4"
+                VerticalAlignment="Top" ZIndex="1"
+                Classes="panel-slide"
+                Classes.open="{Binding HasSelection}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{Binding SelectedCount, StringFormat='{}{0} selected'}"
+                           VerticalAlignment="Center" FontSize="{StaticResource FontSizeBody}" FontWeight="SemiBold" />
+                <Button Content="Add to Queue" Command="{Binding AddSelectedToQueueCommand}"
+                        Padding="8,2" FontSize="{StaticResource FontSizeSmall}" />
+                <Button Content="Mark Watched" Command="{Binding MarkSelectedWatchedCommand}"
+                        Padding="8,2" FontSize="{StaticResource FontSizeSmall}" />
+                <Button Content="Mark Unwatched" Command="{Binding MarkSelectedUnwatchedCommand}"
+                        Padding="8,2" FontSize="{StaticResource FontSizeSmall}" />
+                <Button Content="Delete" Command="{Binding DeleteSelectedCommand}"
+                        Padding="8,2" FontSize="{StaticResource FontSizeSmall}" />
+                <Button Content="Deselect All" Command="{Binding DeselectAllCommand}"
+                        Padding="8,2" FontSize="{StaticResource FontSizeSmall}" />
+            </StackPanel>
+        </Border>
+
+        <!-- Skeleton loading rows — shown while scanning empty library -->
+        <StackPanel Grid.Row="4" Spacing="4" Margin="0,8" IsVisible="{Binding IsScanning}">
+            <Border Classes="skeleton" Width="400" HorizontalAlignment="Left" />
+            <Border Classes="skeleton" Width="350" HorizontalAlignment="Left" />
+            <Border Classes="skeleton" Width="380" HorizontalAlignment="Left" />
+            <Border Classes="skeleton" Width="320" HorizontalAlignment="Left" />
+            <Border Classes="skeleton" Width="360" HorizontalAlignment="Left" />
+            <Border Classes="skeleton" Width="340" HorizontalAlignment="Left" />
+        </StackPanel>
+
+        <!-- Media list — ListBox with Grid-based DataTemplate (replaces broken DataGrid) -->
+        <Grid Grid.Row="4">
+            <!-- List view (default) -->
+            <ListBox x:Name="LibraryList"
+                     ItemsSource="{Binding Items}"
+                     SelectedItem="{Binding SelectedItem}"
+                     SelectionMode="Single"
+                     IsVisible="{Binding !IsGridView}">
+                <ListBox.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Play"
+                                  Command="{Binding PlayItemCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Add to Queue"
+                                  Command="{Binding AddToQueueCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Play Next"
+                                  Command="{Binding PlayNextItemCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Add to Playlist" x:Name="AddToPlaylistMenu" />
+                        <Separator />
+                        <MenuItem Header="Mark as Watched"
+                                  Command="{Binding MarkWatchedCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Mark as Unwatched"
+                                  Command="{Binding MarkUnwatchedCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <Separator />
+                        <MenuItem Header="Pair with Script..."
+                                  Command="{Binding PairWithScriptCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Set Script Offset..."
+                                  Command="{Binding SetScriptOffsetCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <Separator />
+                        <MenuItem Header="Delete from Disk"
+                                  Command="{Binding DeleteItemCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                    </ContextMenu>
+                </ListBox.ContextMenu>
+                <!-- Column headers -->
+                <ListBox.Styles>
+                    <Style Selector="ListBoxItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="MinHeight" Value="28" />
+                    </Style>
+                    <Style Selector="ListBoxItem:nth-child(2n)">
+                        <Setter Property="Background" Value="{DynamicResource RowAltBrush}" />
+                    </Style>
+                </ListBox.Styles>
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.Template>
+                    <ControlTemplate>
+                        <Border BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{TemplateBinding CornerRadius}">
+                            <DockPanel>
+                                <!-- Sortable column headers row -->
+                                <Border DockPanel.Dock="Top" Classes="library-header"
+                                        Padding="12,6,12,6">
+                                <Grid ColumnDefinitions="28,3*,70,80,80,60,100,2*">
+                                    <CheckBox Grid.Column="0" IsThreeState="False"
+                                              ToolTip.Tip="Select / Deselect All"
+                                              IsChecked="{Binding SelectAllChecked}"
+                                              Padding="0" Margin="0"
+                                              VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Classes="header-sort"
+                                            Content="{Binding SortIndicator_Name}"
+                                            Command="{Binding SortByCommand}"
+                                            CommandParameter="Name"
+                                            HorizontalContentAlignment="Left" />
+                                    <Button Grid.Column="2" Classes="header-sort"
+                                            Content="{Binding SortIndicator_Watched}"
+                                            Command="{Binding SortByCommand}"
+                                            CommandParameter="Watched"
+                                            HorizontalContentAlignment="Left" />
+                                    <Button Grid.Column="3" Classes="header-sort"
+                                            Content="{Binding SortIndicator_Script}"
+                                            Command="{Binding SortByCommand}"
+                                            CommandParameter="Script"
+                                            HorizontalContentAlignment="Left" />
+                                    <Button Grid.Column="4" Classes="header-sort"
+                                            Content="{Binding SortIndicator_Duration}"
+                                            Command="{Binding SortByCommand}"
+                                            CommandParameter="Duration"
+                                            HorizontalContentAlignment="Left" />
+                                    <Button Grid.Column="5" Classes="header-sort"
+                                            Content="{Binding SortIndicator_Type}"
+                                            Command="{Binding SortByCommand}"
+                                            CommandParameter="Type"
+                                            HorizontalContentAlignment="Left" />
+                                    <Button Grid.Column="6" Classes="header-sort"
+                                            Content="{Binding SortIndicator_DateAdded}"
+                                            Command="{Binding SortByCommand}"
+                                            CommandParameter="Date Added"
+                                            HorizontalContentAlignment="Left" />
+                                    <Button Grid.Column="7" Classes="header-sort"
+                                            Content="{Binding SortIndicator_Folder}"
+                                            Command="{Binding SortByCommand}"
+                                            CommandParameter="Folder"
+                                            HorizontalContentAlignment="Left" />
+                                </Grid>
+                                </Border>
+                                <Border DockPanel.Dock="Top" Height="1"
+                                        Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
+                                <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto">
+                                    <ItemsPresenter ItemsPanel="{TemplateBinding ItemsPanel}" />
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Border>
+                    </ControlTemplate>
+                </ListBox.Template>
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LibraryItemViewModel">
+                        <Grid ColumnDefinitions="28,3*,70,80,80,60,100,2*" Margin="12,2,12,2">
+                            <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}"
+                                      Padding="0" Margin="0" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="{Binding WatchedStatus}"
+                                       FontSize="{StaticResource FontSizeSmall}" Opacity="0.7" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="3" Text="{Binding PairingStatus}"
+                                       FontSize="{StaticResource FontSizeSmall}" Opacity="0.7" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="4" Text="{Binding DurationDisplay}"
+                                       FontSize="{StaticResource FontSizeSmall}" Opacity="0.7" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="5" Text="{Binding Extension}"
+                                       FontSize="{StaticResource FontSizeSmall}" Opacity="0.7" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="6" Text="{Binding DateAddedDisplay}"
+                                       FontSize="{StaticResource FontSizeSmall}" Opacity="0.7" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="7" Text="{Binding Folder}"
+                                       TextTrimming="CharacterEllipsis" FontSize="{StaticResource FontSizeSmall}" Opacity="0.6"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- Grid / card view -->
+            <ListBox x:Name="LibraryGrid"
+                     ItemsSource="{Binding Items}"
+                     SelectedItem="{Binding SelectedItem}"
+                     SelectionMode="Single"
+                     IsVisible="{Binding IsGridView}"
+                     Background="Transparent">
+                <ListBox.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Play"
+                                  Command="{Binding PlayItemCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Add to Queue"
+                                  Command="{Binding AddToQueueCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Play Next"
+                                  Command="{Binding PlayNextItemCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Add to Playlist" x:Name="AddToPlaylistMenuGrid" />
+                        <Separator />
+                        <MenuItem Header="Mark as Watched"
+                                  Command="{Binding MarkWatchedCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Mark as Unwatched"
+                                  Command="{Binding MarkUnwatchedCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <Separator />
+                        <MenuItem Header="Pair with Script..."
+                                  Command="{Binding PairWithScriptCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <MenuItem Header="Set Script Offset..."
+                                  Command="{Binding SetScriptOffsetCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                        <Separator />
+                        <MenuItem Header="Delete from Disk"
+                                  Command="{Binding DeleteItemCommand}"
+                                  CommandParameter="{Binding SelectedItem}" />
+                    </ContextMenu>
+                </ListBox.ContextMenu>
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.Styles>
+                    <Style Selector="ListBoxItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="4" />
+                    </Style>
+                </ListBox.Styles>
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LibraryItemViewModel">
+                        <Border Width="{Binding CardWidth}"
+                                Height="{Binding CardHeight}"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Background="{DynamicResource CardBgBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1" Padding="8" ClipToBounds="True">
+                            <Grid RowDefinitions="*,Auto,Auto">
+                                <!-- Thumbnail or fallback icon -->
+                                <Panel Grid.Row="0">
+                                    <!-- Fallback icon shows behind thumbnail -->
+                                    <PathIcon Data="M4 4h16v12H4V4zm0 14h16v2H4v-2z"
+                                              Width="32" Height="32" Opacity="0.3"
+                                              VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    <!-- Thumbnail overlays icon when available -->
+                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                </Panel>
+                                <!-- Filename -->
+                                <TextBlock Grid.Row="1" Text="{Binding DisplayName}"
+                                           TextTrimming="CharacterEllipsis"
+                                           FontSize="{StaticResource FontSizeSmall}"
+                                           FontWeight="SemiBold"
+                                           Margin="0,4,0,2" />
+                                <!-- Metadata row -->
+                                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding DurationDisplay}"
+                                               FontSize="{StaticResource FontSizeCaption}" Opacity="0.6" />
+                                    <TextBlock Text="{Binding PairingStatus}"
+                                               FontSize="{StaticResource FontSizeCaption}" Opacity="0.6" />
+                                    <TextBlock Text="&#x2713;" IsVisible="{Binding IsWatched}"
+                                               FontSize="{StaticResource FontSizeCaption}"
+                                               Foreground="{DynamicResource SuccessGreenBrush}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- Duplicate results overlay -->
+            <Border IsVisible="{Binding ShowDuplicates}" Background="{DynamicResource SurfaceDarkBrush}"
+                    CornerRadius="{StaticResource RadiusMd}" Padding="12" ZIndex="2">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding DuplicateStatus}" FontSize="{StaticResource FontSizeBody}"
+                                   FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <ProgressBar Width="60" Height="4" IsVisible="{Binding IsDuplicateScan}"
+                                     IsIndeterminate="True" VerticalAlignment="Center" />
+                        <Button Content="Close" Command="{Binding CloseDuplicatesCommand}"
+                                Padding="8,2" FontSize="{StaticResource FontSizeSmall}" />
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding DuplicateGroups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:DuplicateGroupViewModel">
+                                    <Border Margin="0,0,0,8" Padding="8" CornerRadius="{StaticResource RadiusSm}"
+                                            Background="{DynamicResource CardBgBrush}"
+                                            BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock FontSize="{StaticResource FontSizeSmall}" Opacity="0.6">
+                                                <Run Text="{Binding Items.Count, Mode=OneWay}" />
+                                                <Run Text=" files · " />
+                                                <Run Text="{Binding SizeDisplay, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <ItemsControl ItemsSource="{Binding Items}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:LibraryItemViewModel">
+                                                        <TextBlock Text="{Binding MediaItem.FullPath}"
+                                                                   FontSize="{StaticResource FontSizeSmall}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Margin="8,1,0,1" Opacity="0.85" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- Missing files overlay -->
+            <Border IsVisible="{Binding ShowMissingFiles}" Background="{DynamicResource SurfaceDarkBrush}"
+                    CornerRadius="{StaticResource RadiusMd}" Padding="12" ZIndex="2">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding MissingCount, StringFormat='Missing Files ({0})'}"
+                                   FontSize="{StaticResource FontSizeBody}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <Button Content="Close" Command="{Binding CloseMissingFilesCommand}"
+                                Padding="8,2" FontSize="{StaticResource FontSizeSmall}" />
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="These files could not be found on disk. Relocate to update their path, or remove to delete from the library."
+                               FontSize="{StaticResource FontSizeSmall}" Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding MissingFiles}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MissingFileViewModel">
+                                    <Border Margin="0,0,0,4" Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
+                                            Background="{DynamicResource CardBgBrush}"
+                                            BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
+                                        <Grid ColumnDefinitions="*,Auto,Auto">
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding MediaItem.Filename}"
+                                                           FontSize="{StaticResource FontSizeBody}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding MediaItem.FullPath}"
+                                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Content="Relocate..."
+                                                    Command="{Binding RelocateCommand}"
+                                                    FontSize="{StaticResource FontSizeSmall}" Padding="8,2" Margin="8,0,4,0" />
+                                            <Button Grid.Column="2" Content="Remove"
+                                                    Command="{Binding RemoveCommand}"
+                                                    FontSize="{StaticResource FontSizeSmall}" Padding="8,2" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- Empty state overlay -->
+            <TextBlock Text="No items found. Try adjusting your search or scan your library."
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       FontSize="{StaticResource FontSizeSubtitle}" Opacity="0.5"
+                       IsVisible="{Binding IsEmpty}"
+                       IsHitTestVisible="False" />
+        </Grid>
+
+        <!-- Script heatmap preview -->
+        <Border Grid.Row="5" IsVisible="{Binding HasPreviewScript}"
+                Margin="0,4,0,0" CornerRadius="{StaticResource RadiusMd}" ClipToBounds="True"
+                Height="32">
+            <controls:FunscriptHeatmap Script="{Binding PreviewScript}" />
+        </Border>
+
+        <!-- Bottom status -->
+        <StackPanel Grid.Row="6" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+            <TextBlock Text="Double-click to play | Right-click for options | Checkboxes for bulk actions | Click headers to sort" FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" />
+        </StackPanel>
+    </Grid>
+</UserControl>

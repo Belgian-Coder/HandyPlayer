@@ -1,0 +1,17 @@
+# Auto detect text files and ensure LF line endings in repo
+* text=auto
+
+# Binary files — mark as non-diffable
+*.mp4 binary
+*.dll binary
+*.dylib binary
+*.so binary
+*.exe binary
+*.glsl text
+
+# Shell scripts — always LF
+*.sh text eol=lf
+
+# Windows scripts — always CRLF
+*.ps1 text eol=crlf
+*.wxs text eol=crlf

@@ -1,0 +1,737 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HandyPlaylistPlayer.App.ViewModels"
+             xmlns:m="using:HandyPlaylistPlayer.Core.Models"
+             xmlns:converters="using:HandyPlaylistPlayer.App.Converters"
+             x:Class="HandyPlaylistPlayer.App.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+    <DockPanel Margin="16">
+        <TextBlock DockPanel.Dock="Top" Text="Settings" FontSize="{StaticResource FontSizeDisplay}" FontWeight="Bold" Margin="0,0,0,12" />
+
+        <TabControl x:Name="SettingsTabs" SelectionChanged="OnTabSelectionChanged">
+            <!-- ═══ Appearance Tab ═══ -->
+            <TabItem Header="Appearance">
+                <ScrollViewer>
+                    <StackPanel Spacing="12" MaxWidth="600" Margin="0,12,0,0">
+
+                        <!-- ── Theme Palette ── -->
+                        <TextBlock Text="Theme" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                        <Grid ColumnDefinitions="Auto,*">
+                            <ComboBox Grid.Column="0" SelectedIndex="{Binding SelectedThemeIndex}" Width="180">
+                                <ComboBoxItem Content="Dark Navy (default)" Tag="DarkNavy" />
+                                <ComboBoxItem Content="AMOLED Black" Tag="AmoledBlack" />
+                                <ComboBoxItem Content="Dark Gray" Tag="DarkGray" />
+                                <ComboBoxItem Content="Dracula" Tag="Dracula" />
+                                <ComboBoxItem Content="Slate" Tag="Slate" />
+                            </ComboBox>
+                            <TextBlock Grid.Column="1"
+                                       Text="Changes background, sidebar, cards, and row colors instantly."
+                                       FontSize="{StaticResource FontSizeSmall}" Opacity="0.5"
+                                       VerticalAlignment="Center" Margin="8,0,0,0" TextWrapping="Wrap" />
+                        </Grid>
+
+                        <Border Height="1" Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" Margin="0,4" />
+
+                        <!-- ── Accent Color ── -->
+                        <TextBlock Text="Accent Color" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                        <TextBlock Text="Applies to buttons, highlights, and selection. Theme defaults appear at the top."
+                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                        <TextBox Text="{Binding AccentSearch}" Watermark="Search by name or hex…" />
+                        <ListBox ItemsSource="{Binding FilteredAccentColors}"
+                                 SelectedItem="{Binding SelectedAccentColor}"
+                                 AutoScrollToSelectedItem="False"
+                                 Height="220">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:NamedColor">
+                                    <Grid ColumnDefinitions="22,*,Auto" Margin="2,1">
+                                        <Border Grid.Column="0" Width="16" Height="16" CornerRadius="2"
+                                                Background="{Binding Hex, Converter={x:Static converters:ColorToBrushConverter.Instance}}"
+                                                VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Hex}" FontFamily="Consolas"
+                                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.6"
+                                                   VerticalAlignment="Center" Margin="8,0,4,0" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <TextBlock Text="{Binding StatusText}"
+                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.7"
+                                   IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                        <Border Height="1" Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" Margin="0,4" />
+
+                        <!-- ── Custom Colors ── -->
+                        <TextBlock Text="Custom Colors" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                        <TextBlock Text="Fine-tune individual colors on top of the selected theme. Theme defaults appear at the top of each list. Selecting a color applies it immediately."
+                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+
+                        <!-- Background -->
+                        <TextBlock Text="Background" FontSize="{StaticResource FontSizeBody}" Margin="0,4,0,0" />
+                        <TextBox Text="{Binding BgSearch}" Watermark="Search by name or hex…" />
+                        <ListBox ItemsSource="{Binding FilteredBgColors}"
+                                 SelectedItem="{Binding SelectedBgColor}"
+                                 AutoScrollToSelectedItem="False"
+                                 Height="220">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:NamedColor">
+                                    <Grid ColumnDefinitions="22,*,Auto" Margin="2,1">
+                                        <Border Grid.Column="0" Width="16" Height="16" CornerRadius="2"
+                                                Background="{Binding Hex, Converter={x:Static converters:ColorToBrushConverter.Instance}}"
+                                                VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Hex}" FontFamily="Consolas"
+                                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.6"
+                                                   VerticalAlignment="Center" Margin="8,0,4,0" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- Text Color -->
+                        <TextBlock Text="Text Color" FontSize="{StaticResource FontSizeBody}" Margin="0,4,0,0" />
+                        <TextBox Text="{Binding TextSearch}" Watermark="Search by name or hex…" />
+                        <ListBox ItemsSource="{Binding FilteredTextColors}"
+                                 SelectedItem="{Binding SelectedTextColor}"
+                                 AutoScrollToSelectedItem="False"
+                                 Height="220">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:NamedColor">
+                                    <Grid ColumnDefinitions="22,*,Auto" Margin="2,1">
+                                        <Border Grid.Column="0" Width="16" Height="16" CornerRadius="2"
+                                                Background="{Binding Hex, Converter={x:Static converters:ColorToBrushConverter.Instance}}"
+                                                VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Hex}" FontFamily="Consolas"
+                                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.6"
+                                                   VerticalAlignment="Center" Margin="8,0,4,0" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- Highlighted Text Color -->
+                        <TextBlock Text="Highlighted Text Color" FontSize="{StaticResource FontSizeBody}" Margin="0,4,0,0" />
+                        <TextBox Text="{Binding HighlightSearch}" Watermark="Search by name or hex…" />
+                        <ListBox ItemsSource="{Binding FilteredHighlightColors}"
+                                 SelectedItem="{Binding SelectedHighlightColor}"
+                                 AutoScrollToSelectedItem="False"
+                                 Height="220">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:NamedColor">
+                                    <Grid ColumnDefinitions="22,*,Auto" Margin="2,1">
+                                        <Border Grid.Column="0" Width="16" Height="16" CornerRadius="2"
+                                                Background="{Binding Hex, Converter={x:Static converters:ColorToBrushConverter.Instance}}"
+                                                VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Hex}" FontFamily="Consolas"
+                                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.6"
+                                                   VerticalAlignment="Center" Margin="8,0,4,0" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- Button Color -->
+                        <TextBlock Text="Button Color" FontSize="{StaticResource FontSizeBody}" Margin="0,4,0,0" />
+                        <TextBox Text="{Binding ButtonSearch}" Watermark="Search by name or hex…" />
+                        <ListBox ItemsSource="{Binding FilteredButtonColors}"
+                                 SelectedItem="{Binding SelectedButtonColor}"
+                                 AutoScrollToSelectedItem="False"
+                                 Height="220">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:NamedColor">
+                                    <Grid ColumnDefinitions="22,*,Auto" Margin="2,1">
+                                        <Border Grid.Column="0" Width="16" Height="16" CornerRadius="2"
+                                                Background="{Binding Hex, Converter={x:Static converters:ColorToBrushConverter.Instance}}"
+                                                VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Hex}" FontFamily="Consolas"
+                                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.6"
+                                                   VerticalAlignment="Center" Margin="8,0,4,0" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,8">
+                            <Button Content="Apply" Command="{Binding ApplyAllColorsCommand}"
+                                    ToolTip.Tip="Re-apply all current color selections" />
+                            <Button Content="Reset to Theme" Command="{Binding ResetCustomColorsCommand}"
+                                    ToolTip.Tip="Restore background, text, and highlight colors to theme defaults" />
+                        </StackPanel>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══ Connection Tab ═══ -->
+            <TabItem Header="Connection">
+                <ScrollViewer>
+                    <StackPanel Spacing="12" MaxWidth="600" Margin="0,12,0,0">
+                        <Border Classes="card">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Backend" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                                <ComboBox SelectedIndex="{Binding SelectedBackendIndex}" Width="200">
+                                    <ComboBoxItem Content="Handy" />
+                                    <ComboBoxItem Content="Intiface" />
+                                </ComboBox>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Classes="card" IsVisible="{Binding IsHandyBackend}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Handy Connection Key" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBox Grid.Column="0" Text="{Binding ConnectionKey}"
+                                             Watermark="Enter your connection key" />
+                                    <Button Grid.Column="1" Content="Save" Margin="8,0,0,0"
+                                            Command="{Binding SaveConnectionKeyCommand}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Classes="card" IsVisible="{Binding IsHandyBackend}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Handy Protocol" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                                <ComboBox SelectedIndex="{Binding SelectedProtocolIndex}" Width="320">
+                                    <ComboBoxItem Content="HDSP (Direct Streaming)" />
+                                    <ComboBoxItem Content="HSSP (Server Sync)" />
+                                </ComboBox>
+                                <TextBlock Text="HDSP streams positions directly — works with any script size. HSSP uploads the script for time-synced playback (may fail for large scripts)."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Classes="card" IsVisible="{Binding IsHandyBackend}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Default Sync Offset (ms)" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <NumericUpDown Grid.Column="0" Value="{Binding DefaultOffsetMs}"
+                                                   Minimum="-500" Maximum="500" Increment="10" Width="120" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="Negative = device leads video. Compensates for network latency."
+                                               FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Classes="card" IsVisible="{Binding !IsHandyBackend}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Intiface WebSocket URL" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBox Grid.Column="0" Text="{Binding IntifaceUrl}"
+                                             Watermark="ws://localhost:12345" />
+                                    <Button Grid.Column="1" Content="Save" Margin="8,0,0,0"
+                                            Command="{Binding SaveIntifaceUrlCommand}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Device Info -->
+                        <StackPanel Spacing="8" IsVisible="{Binding IsHandyBackend}" Margin="0,8,0,0">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <TextBlock Grid.Column="0" Text="Device Info" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                                <Button Grid.Column="2" Content="Refresh" FontSize="{StaticResource FontSizeSmall}"
+                                        Command="{Binding RefreshDeviceInfoFromApiCommand}" />
+                            </Grid>
+                            <Border Padding="12,8" CornerRadius="{StaticResource RadiusMd}"
+                                    Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="{Binding DeviceInfoText}" FontFamily="Consolas" FontSize="{StaticResource FontSizeBody}" />
+                                    <TextBlock Text="{Binding DeviceStatusText}" FontFamily="Consolas" FontSize="{StaticResource FontSizeBody}"
+                                               IsVisible="{Binding DeviceStatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    <TextBlock Text="{Binding DeviceSlideText}" FontFamily="Consolas" FontSize="{StaticResource FontSizeBody}"
+                                               IsVisible="{Binding DeviceSlideText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding StatusText}" Opacity="0.6" FontSize="{StaticResource FontSizeBody}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══ Calibration Tab ═══ -->
+            <TabItem Header="Calibration" IsVisible="{Binding IsHandyBackend}">
+                <ScrollViewer>
+                    <StackPanel Spacing="16" MaxWidth="600" Margin="0,12,0,0">
+                        <TextBlock Text="Adjust offset until the visual indicator matches the device movement."
+                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+
+                        <Grid ColumnDefinitions="60,*" Height="200">
+                            <Border Grid.Column="0" Background="{DynamicResource CalibrationBgBrush}" CornerRadius="{StaticResource RadiusMd}" ClipToBounds="True">
+                                <Canvas>
+                                    <Border Width="40" Height="20" CornerRadius="{StaticResource RadiusMd}"
+                                            Background="DodgerBlue" Canvas.Left="10">
+                                        <Canvas.Top>
+                                            <Binding Path="CalibrationIndicatorTop" />
+                                        </Canvas.Top>
+                                    </Border>
+                                </Canvas>
+                            </Border>
+
+                            <StackPanel Grid.Column="1" Spacing="8" Margin="12,0,0,0" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="Start Calibration"
+                                            Command="{Binding StartCalibrationCommand}"
+                                            IsVisible="{Binding !IsCalibrationRunning}" />
+                                    <Button Content="Stop &amp; Save"
+                                            Command="{Binding StopCalibrationCommand}"
+                                            IsVisible="{Binding IsCalibrationRunning}" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <Button Content="-50" FontSize="{StaticResource FontSizeCaption}" Padding="6,2"
+                                            Command="{Binding NudgeCalibrationOffsetCommand}" CommandParameter="-50" />
+                                    <Button Content="-10" FontSize="{StaticResource FontSizeCaption}" Padding="6,2"
+                                            Command="{Binding NudgeCalibrationOffsetCommand}" CommandParameter="-10" />
+                                    <Button Content="+10" FontSize="{StaticResource FontSizeCaption}" Padding="6,2"
+                                            Command="{Binding NudgeCalibrationOffsetCommand}" CommandParameter="10" />
+                                    <Button Content="+50" FontSize="{StaticResource FontSizeCaption}" Padding="6,2"
+                                            Command="{Binding NudgeCalibrationOffsetCommand}" CommandParameter="50" />
+                                    <TextBlock VerticalAlignment="Center" Margin="4,0,0,0" FontFamily="Consolas">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0}ms">
+                                                <Binding Path="DefaultOffsetMs" />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <TextBlock Text="{Binding CalibrationStatusText}"
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.6" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══ Video Engine Tab ═══ -->
+            <TabItem Header="Video Engine">
+                <ScrollViewer>
+                    <StackPanel Spacing="16" MaxWidth="600" Margin="0,12,0,0">
+                        <TextBlock Text="Most settings apply immediately. VO Backend requires a full app restart."
+                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+
+                        <!-- ── Renderer (restart required) ── -->
+                        <Border Height="1" Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" Margin="0,4" />
+                        <TextBlock Text="Renderer  ·  Restart Required" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="VO Backend" FontSize="{StaticResource FontSizeBody}" />
+                            <Grid ColumnDefinitions="Auto,*">
+                                <ComboBox Grid.Column="0" SelectedIndex="{Binding MpvVoBackendIndex}" Width="220">
+                                    <ComboBoxItem Content="GPU (stable, default)" />
+                                    <ComboBoxItem Content="GPU-Next (modern renderer)" />
+                                </ComboBox>
+                                <TextBlock Grid.Column="1"
+                                           Text="GPU-Next is the modern mpv renderer with better GLSL shader support and improved HDR. Required for MetalFX and recommended for AI upscaling."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0" TextWrapping="Wrap" />
+                            </Grid>
+                        </StackPanel>
+
+                        <Border Height="1" Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" Margin="0,4" />
+                        <TextBlock Text="Playback" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Seek Step (seconds)" FontSize="{StaticResource FontSizeBody}" />
+                            <Grid ColumnDefinitions="Auto,*">
+                                <NumericUpDown Grid.Column="0" Value="{Binding SeekStepSeconds}"
+                                               Minimum="1" Maximum="60" Increment="1" Width="120"
+                                               FormatString="0" />
+                                <TextBlock Grid.Column="1"
+                                           Text="Arrow key seek duration (Left/Right)."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0" />
+                            </Grid>
+                        </StackPanel>
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Remember Playback Position" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <TextBlock Text="Saves the position when you stop or skip, and resumes from there next time you open the same file. Position is cleared on completion."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding SaveLastPosition}"
+                                          OnContent="On" OffContent="Off" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Restore Queue on Startup" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <TextBlock Text="Re-opens the queue from the last session and resumes on the item you were watching. Works together with Remember Playback Position to also seek to where you left off."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding RestoreQueueOnStartup}"
+                                          OnContent="On" OffContent="Off" />
+                        </Grid>
+
+                        <!-- Advanced playback thresholds -->
+                        <TextBlock Text="Advanced" FontSize="{StaticResource FontSizeBody}"
+                                   FontWeight="SemiBold" Margin="0,8,0,4" />
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Watched Threshold (%)" FontSize="{StaticResource FontSizeBody}" />
+                            <Grid ColumnDefinitions="Auto,*">
+                                <NumericUpDown Grid.Column="0" Value="{Binding WatchedThresholdPercent}"
+                                               Minimum="10" Maximum="100" Increment="5" Width="120"
+                                               FormatString="0" />
+                                <TextBlock Grid.Column="1"
+                                           Text="Percentage of video that must be played to mark as watched."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0" />
+                            </Grid>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Gapless Prepare (seconds)" FontSize="{StaticResource FontSizeBody}" />
+                            <Grid ColumnDefinitions="Auto,*">
+                                <NumericUpDown Grid.Column="0" Value="{Binding GaplessPrepareSeconds}"
+                                               Minimum="5" Maximum="120" Increment="5" Width="120"
+                                               FormatString="0" />
+                                <TextBlock Grid.Column="1"
+                                           Text="Seconds before the end of a video to pre-parse the next script."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0" />
+                            </Grid>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Fullscreen Auto-Hide (seconds)" FontSize="{StaticResource FontSizeBody}" />
+                            <Grid ColumnDefinitions="Auto,*">
+                                <NumericUpDown Grid.Column="0" Value="{Binding FullscreenAutoHideSeconds}"
+                                               Minimum="1" Maximum="30" Increment="1" Width="120"
+                                               FormatString="0" />
+                                <TextBlock Grid.Column="1"
+                                           Text="Seconds of inactivity before hiding controls in fullscreen."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0" />
+                            </Grid>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Thumbnail Size (restart required)" FontSize="{StaticResource FontSizeBody}" />
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,*">
+                                <NumericUpDown Grid.Column="0" Value="{Binding ThumbnailWidth}"
+                                               Minimum="80" Maximum="1920" Increment="40" Width="120"
+                                               FormatString="0" />
+                                <TextBlock Grid.Column="1" Text="×" VerticalAlignment="Center" Margin="8,0,8,0" />
+                                <NumericUpDown Grid.Column="2" Value="{Binding ThumbnailHeight}"
+                                               Minimum="45" Maximum="1080" Increment="45" Width="120"
+                                               FormatString="0" />
+                                <TextBlock Grid.Column="3"
+                                           Text="Width × Height in pixels for queue thumbnails."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0" />
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Player control visibility -->
+                        <TextBlock Text="Player Control Visibility" FontSize="{StaticResource FontSizeBody}"
+                                   FontWeight="SemiBold" Margin="0,8,0,4" />
+                        <TextBlock Text="Choose which controls appear in the transport bar. Play/Pause and seek bar are always visible."
+                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" Margin="0,0,0,4" />
+                        <WrapPanel Orientation="Horizontal">
+                            <CheckBox IsChecked="{Binding ShowNavButtons}"    Content="Prev / Next"       Margin="0,2,12,2" />
+                            <CheckBox IsChecked="{Binding ShowFullscreenBtn}" Content="Fullscreen"         Margin="0,2,12,2" />
+                            <CheckBox IsChecked="{Binding ShowAbLoopButtons}" Content="A-B Loop"           Margin="0,2,12,2" />
+                            <CheckBox IsChecked="{Binding ShowSpeedControls}" Content="Speed"              Margin="0,2,12,2" />
+                            <CheckBox IsChecked="{Binding ShowQueueButton}"   Content="Queue"              Margin="0,2,12,2" />
+                            <CheckBox IsChecked="{Binding ShowOverridesBtn}"  Content="Overrides"          Margin="0,2,12,2" />
+                            <CheckBox IsChecked="{Binding ShowEqButton}"      Content="EQ"                 Margin="0,2,12,2" />
+                            <CheckBox IsChecked="{Binding ShowTracksButton}"  Content="Tracks"             Margin="0,2,12,2" />
+                            <CheckBox IsChecked="{Binding ShowVolumeControl}" Content="Volume"             Margin="0,2,12,2" />
+                        </WrapPanel>
+
+                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,8,0,0">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Hardware Decoding (GPU)" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <TextBlock Text="Uses GPU acceleration for video decode (D3D11VA / VideoToolbox). Applies immediately."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding DetectedHwDecoder}"
+                                       FontSize="{StaticResource FontSizeCaption}" Opacity="0.6"
+                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <ToggleSwitch Grid.Column="2" IsChecked="{Binding MpvHardwareDecode}"
+                                          OnContent="On" OffContent="Off" />
+                        </Grid>
+
+                        <StackPanel Spacing="4" Margin="0,4,0,0">
+                            <TextBlock Text="GPU Rendering API" FontSize="{StaticResource FontSizeBody}" />
+                            <Grid ColumnDefinitions="Auto,*">
+                                <ComboBox Grid.Column="0" SelectedIndex="{Binding MpvGpuApiIndex}" Width="160">
+                                    <ComboBoxItem Content="Auto" />
+                                    <ComboBoxItem Content="D3D11 (Windows)" />
+                                    <ComboBoxItem Content="Vulkan" />
+                                    <ComboBoxItem Content="OpenGL" />
+                                </ComboBox>
+                                <TextBlock Grid.Column="1"
+                                           Text="GPU rendering back-end. Auto lets mpv pick the best for your platform. Reloads current video to apply."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0" TextWrapping="Wrap" />
+                            </Grid>
+                        </StackPanel>
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Deband (Reduce Banding)" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <TextBlock Text="Removes colour-banding artefacts on gradients. Slightly heavier on GPU. Applies immediately."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding MpvDeband}"
+                                          OnContent="On" OffContent="Off" />
+                        </Grid>
+
+                        <StackPanel Spacing="4" Margin="0,4,0,0">
+                            <TextBlock Text="Read-Ahead Cache (MB)" FontSize="{StaticResource FontSizeBody}" />
+                            <Grid ColumnDefinitions="Auto,*">
+                                <NumericUpDown Grid.Column="0" Value="{Binding MpvDemuxerCacheMb}"
+                                               Minimum="32" Maximum="2048" Increment="32" Width="120"
+                                               FormatString="0" />
+                                <TextBlock Grid.Column="1"
+                                           Text="Demuxer read-ahead buffer. Larger values smooth out network/disk stalls. Default 150 MB. Applies immediately."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0" TextWrapping="Wrap" />
+                            </Grid>
+                        </StackPanel>
+
+                        <Border Height="1" Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" Margin="0,8" />
+                        <TextBlock Text="Video Quality" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+
+                        <StackPanel Spacing="6" Margin="0,4,0,0">
+                            <TextBlock Text="Upscaling" FontSize="{StaticResource FontSizeBody}" />
+                            <!-- Primary selector: standard filters + AI mode trigger -->
+                            <ComboBox SelectedIndex="{Binding MpvScaleIndex}" Width="260">
+                                <ComboBoxItem Content="Spline36 — balanced (default)" />
+                                <ComboBoxItem Content="Bilinear — fastest, lowest quality" />
+                                <ComboBoxItem Content="Lanczos — sharp edges" />
+                                <ComboBoxItem Content="EWA Lanczos — highest quality" />
+                                <ComboBoxItem Content="Mitchell — smooth bicubic" />
+                                <ComboBoxItem Content="AI Upscaling / Sharpening →" />
+                            </ComboBox>
+                            <!-- AI shader sub-selector: only visible when AI mode is active -->
+                            <ComboBox SelectedIndex="{Binding MpvShaderPresetIndex}" Width="260"
+                                      IsVisible="{Binding IsAiUpscalingMode}">
+                                <ComboBoxItem Content="None — revert to standard filter" />
+                                <ComboBoxItem Content="CAS Sharpen (any GPU)" />
+                                <ComboBoxItem Content="FSR 1.0 — spatial upscaling (any GPU)" />
+                                <ComboBoxItem Content="NIS — NVIDIA spatial upscaling (any GPU)" />
+                                <ComboBoxItem Content="RAVU Lite — real-world CNN (any GPU)" />
+                                <ComboBoxItem Content="FSRCNNX — best-quality CNN (mid GPU)" />
+                                <ComboBoxItem Content="nlmeans — denoise + sharpen (any GPU)" />
+                                <ComboBoxItem Content="Anime4K Fast — Mode C (anime, mid GPU)" />
+                                <ComboBoxItem Content="Anime4K Quality — Mode A (anime, high GPU)" />
+                                <ComboBoxItem Content="MetalFX Spatial — Apple HW (macOS only)"
+                                              IsEnabled="{Binding IsMetalFxSupported}" />
+                                <ComboBoxItem Content="Auto Fast — denoise + FSR + sharpen (any GPU)" />
+                                <ComboBoxItem Content="Auto Quality — denoise + FSRCNNX + sharpen (mid GPU)" />
+                            </ComboBox>
+                            <!-- Per-option description -->
+                            <TextBlock Text="{Binding UpscalingDescription}"
+                                       FontSize="{StaticResource FontSizeSmall}" Opacity="0.5"
+                                       TextWrapping="Wrap"
+                                       IsVisible="{Binding UpscalingDescription, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="4" Margin="0,4,0,0">
+                            <TextBlock Text="HDR Tone Mapping" FontSize="{StaticResource FontSizeBody}" />
+                            <Grid ColumnDefinitions="Auto,*">
+                                <ComboBox Grid.Column="0" SelectedIndex="{Binding MpvToneMappingIndex}" Width="220">
+                                    <ComboBoxItem Content="Auto (recommended)" />
+                                    <ComboBoxItem Content="BT.2446-A — standards-compliant" />
+                                    <ComboBoxItem Content="Hable — filmic, natural" />
+                                    <ComboBoxItem Content="Reinhard — simple, fast" />
+                                    <ComboBoxItem Content="Clip — fastest, hard cut" />
+                                </ComboBox>
+                                <TextBlock Grid.Column="1"
+                                           Text="HDR→SDR tone-mapping curve for HDR10/HLG content on SDR displays. Applies immediately."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0" TextWrapping="Wrap" />
+                            </Grid>
+                        </StackPanel>
+
+                        <Border Height="1" Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" Margin="0,8" />
+                        <TextBlock Text="Audio" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Loudness Normalization (EBU R128)" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <TextBlock Text="Evens out volume differences between videos. Slight CPU overhead. Applies immediately."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding MpvLoudnorm}"
+                                          OnContent="On" OffContent="Off" />
+                        </Grid>
+
+                        <StackPanel Spacing="4" Margin="0,4,0,0">
+                            <TextBlock Text="Volume Boost Cap (%)" FontSize="{StaticResource FontSizeBody}" />
+                            <Grid ColumnDefinitions="Auto,*">
+                                <NumericUpDown Grid.Column="0" Value="{Binding MpvVolumeMax}"
+                                               Minimum="100" Maximum="200" Increment="10" Width="120"
+                                               FormatString="0" />
+                                <TextBlock Grid.Column="1"
+                                           Text="Sets the maximum volume the slider can reach. 100 = normal; 150 = 50% louder than normal. Applies immediately."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0" TextWrapping="Wrap" />
+                            </Grid>
+                        </StackPanel>
+
+                        <Border Height="1" Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" Margin="0,8" />
+                        <TextBlock Text="Advanced Video  ·  Restart Required" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Sync to Display Refresh Rate" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <TextBlock Text="Smooths motion by resampling frames to your monitor's refresh rate (video-sync=display-resample). Small CPU cost. Requires restart."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding MpvVideoSync}"
+                                          OnContent="On" OffContent="Off" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Dithering — Reduce Banding on High-Bit Displays" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <TextBlock Text="Applies fruit dithering at display depth to eliminate 8-bit banding artefacts on 10-bit panels. Near-zero cost. Requires restart."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding MpvDither}"
+                                          OnContent="On" OffContent="Off" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Auto-Load Matching Subtitle Files" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <TextBlock Text="Loads .srt/.ass/.sub files in the same folder that share the video's filename (sub-auto=fuzzy). Requires restart."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding MpvSubAuto}"
+                                          OnContent="On" OffContent="Off" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Pitch Correction at Non-1× Speed" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <TextBlock Text="Keeps audio pitch constant when playing at 0.5×–2.0× using scaletempo2. Applies live — no restart needed."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding MpvPitchCorrection}"
+                                          OnContent="On" OffContent="Off" />
+                        </Grid>
+
+                        <Border Height="1" Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" Margin="0,8" />
+                        <TextBlock Text="Color Management" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="ICC Color Profile (Monitor Calibration)" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <TextBlock Text="Use the monitor's ICC profile for accurate colors on calibrated displays. Windows / macOS only. Reloads current video to apply."
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding MpvIccProfile}"
+                                          OnContent="On" OffContent="Off" />
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══ Library Tab ═══ -->
+            <TabItem Header="Library">
+                <ScrollViewer>
+                    <StackPanel Spacing="16" MaxWidth="600" Margin="0,12,0,0">
+                        <TextBlock Text="Library Folders" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+
+                        <ItemsControl ItemsSource="{Binding LibraryRoots}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="m:LibraryRoot">
+                                    <Border Padding="8,6" Margin="0,0,0,4" CornerRadius="{StaticResource RadiusMd}"
+                                            Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                                        <Grid ColumnDefinitions="*,Auto,Auto">
+                                            <TextBlock Grid.Column="0" Text="{Binding Path}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Status}"
+                                                       VerticalAlignment="Center" Margin="8,0" Opacity="0.6" FontSize="{StaticResource FontSizeBody}" />
+                                            <Button Grid.Column="2" Content="Remove" FontSize="{StaticResource FontSizeSmall}"
+                                                    Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).RemoveLibraryRootCommand}"
+                                                    CommandParameter="{Binding}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Button x:Name="AddFolderButton" Content="Add Folder"
+                                Command="{Binding AddFolderCommand}"
+                                CommandParameter="{Binding $parent[Window]}" />
+
+                        <Border Height="1" Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" Margin="0,8" />
+
+                        <TextBlock Text="Maintenance" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                        <StackPanel Spacing="4">
+                            <Button Content="Clear Database Cache"
+                                    Command="{Binding ClearDatabaseCacheCommand}" />
+                            <TextBlock Text="Removes indexed media files, pairings, and script hosting cache. Settings, library folders, playlists, and presets are preserved. Re-scan library after clearing."
+                                       FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══ Keybindings Tab ═══ -->
+            <TabItem Header="Keys">
+                <ScrollViewer>
+                    <StackPanel Spacing="12" MaxWidth="600" Margin="0,12,0,0">
+                        <TextBlock Text="Click a key binding to change it. Press Escape to cancel."
+                                   FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" />
+
+                        <ItemsControl ItemsSource="{Binding Keybindings}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:KeybindingEntry">
+                                    <Grid ColumnDefinitions="*,120,Auto" Margin="0,2">
+                                        <TextBlock Grid.Column="0" Text="{Binding DisplayName}"
+                                                   VerticalAlignment="Center" FontSize="{StaticResource FontSizeSubtitle}" />
+                                        <Button Grid.Column="1" Content="{Binding Key}"
+                                                FontFamily="Consolas" FontSize="{StaticResource FontSizeBody}" Padding="8,4"
+                                                HorizontalContentAlignment="Center"
+                                                Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).StartKeyCaptureCommand}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip.Tip="Click to rebind" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Button Content="Reset to Defaults"
+                                Command="{Binding ResetKeybindingsCommand}"
+                                Margin="0,8,0,0" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══ About Tab ═══ -->
+            <TabItem Header="About">
+                <StackPanel Spacing="8" MaxWidth="600" Margin="0,12,0,0">
+                    <TextBlock Text="HandyPlaylistPlayer v0.1.0" FontSize="{StaticResource FontSizeTitle}" />
+                    <TextBlock Text=".NET 10 + Avalonia UI + mpv/libmpv" Opacity="0.5" FontSize="{StaticResource FontSizeBody}" />
+
+                    <Separator Margin="0,8" />
+                    <TextBlock Text="Import / Export" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                    <TextBlock Text="Export or import all settings, playlists, and presets as JSON."
+                               Opacity="0.6" FontSize="{StaticResource FontSizeBody}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Export..."
+                                Command="{Binding ExportDataCommand}"
+                                CommandParameter="{Binding $parent[Window]}" />
+                        <Button Content="Import..."
+                                Command="{Binding ImportDataCommand}"
+                                CommandParameter="{Binding $parent[Window]}" />
+                    </StackPanel>
+
+                    <Separator Margin="0,8" />
+                    <TextBlock Text="Logs" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+                    <TextBlock Text="Save log files as a ZIP for troubleshooting or to e-mail for support."
+                               Opacity="0.6" FontSize="{StaticResource FontSizeBody}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Save Logs..."
+                                Command="{Binding SaveLogsCommand}"
+                                CommandParameter="{Binding $parent[Window]}" />
+                        <Button Content="Open Logs Folder"
+                                Command="{Binding OpenLogsFolderCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</UserControl>

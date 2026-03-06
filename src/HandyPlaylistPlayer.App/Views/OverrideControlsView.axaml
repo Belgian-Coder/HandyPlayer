@@ -1,0 +1,144 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HandyPlaylistPlayer.App.ViewModels"
+             x:Class="HandyPlaylistPlayer.App.Views.OverrideControlsView"
+             x:DataType="vm:OverrideControlsViewModel">
+    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+            CornerRadius="{StaticResource RadiusMd}" Padding="12" Margin="0,4,0,0"
+            Classes="panel-slide"
+            Classes.open="{Binding IsPanelVisible}">
+        <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="Override Controls" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                    <ComboBox ItemsSource="{Binding Presets}" SelectedItem="{Binding SelectedPreset}"
+                              DisplayMemberBinding="{Binding Name}" Width="140"
+                              PlaceholderText="Preset..." />
+                    <Button Content="Reset" Command="{Binding ResetToDefaultsCommand}" FontSize="{StaticResource FontSizeSmall}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Range -->
+            <Grid ColumnDefinitions="80,*,40,*,40">
+                <TextBlock Text="Range" VerticalAlignment="Center" />
+                <Slider Grid.Column="1" Minimum="0" Maximum="100"
+                        Value="{Binding RangeMin}" />
+                <TextBlock Grid.Column="2" Text="{Binding RangeMin}" HorizontalAlignment="Center"
+                           VerticalAlignment="Center" FontSize="{StaticResource FontSizeSmall}" />
+                <Slider Grid.Column="3" Minimum="0" Maximum="100"
+                        Value="{Binding RangeMax}" />
+                <TextBlock Grid.Column="4" Text="{Binding RangeMax}" HorizontalAlignment="Center"
+                           VerticalAlignment="Center" FontSize="{StaticResource FontSizeSmall}" />
+            </Grid>
+
+            <!-- Latency Offset -->
+            <Grid ColumnDefinitions="80,Auto,Auto,Auto,Auto,*,60">
+                <TextBlock Text="Offset" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="-50" FontSize="{StaticResource FontSizeCaption}" Padding="4,2"
+                        Command="{Binding NudgeOffsetCommand}" CommandParameter="-50" />
+                <Button Grid.Column="2" Content="-10" FontSize="{StaticResource FontSizeCaption}" Padding="4,2" Margin="2,0"
+                        Command="{Binding NudgeOffsetCommand}" CommandParameter="-10" />
+                <Button Grid.Column="3" Content="+10" FontSize="{StaticResource FontSizeCaption}" Padding="4,2" Margin="2,0"
+                        Command="{Binding NudgeOffsetCommand}" CommandParameter="10" />
+                <Button Grid.Column="4" Content="+50" FontSize="{StaticResource FontSizeCaption}" Padding="4,2"
+                        Command="{Binding NudgeOffsetCommand}" CommandParameter="50" />
+                <Slider Grid.Column="5" Minimum="-500" Maximum="500"
+                        Value="{Binding OffsetMs}" />
+                <TextBlock Grid.Column="6" VerticalAlignment="Center" FontSize="{StaticResource FontSizeSmall}"
+                           HorizontalAlignment="Center">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="{}{0}ms">
+                            <Binding Path="OffsetMs" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+            </Grid>
+            <!-- Save offset to current video pairing -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="80,0,0,0">
+                <Button Content="Save to Video" FontSize="{StaticResource FontSizeCaption}" Padding="6,2"
+                        Command="{Binding SaveOffsetToVideoCommand}"
+                        IsVisible="{Binding HasPairing}"
+                        ToolTip.Tip="Save current offset to this video's script pairing" />
+                <TextBlock Text="{Binding VideoOffsetStatus}" FontSize="{StaticResource FontSizeCaption}"
+                           Opacity="0.7" VerticalAlignment="Center"
+                           IsVisible="{Binding VideoOffsetStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+
+            <!-- Invert + Speed Limit (side by side) -->
+            <Grid ColumnDefinitions="Auto,Auto,16,Auto,*,60">
+                <TextBlock Text="Invert" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <CheckBox Grid.Column="1" IsChecked="{Binding Invert}" />
+                <TextBlock Grid.Column="3" Text="Speed Lim" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <Slider Grid.Column="4" Minimum="0" Maximum="500"
+                        Value="{Binding SpeedLimit}" />
+                <TextBlock Grid.Column="5" VerticalAlignment="Center" FontSize="{StaticResource FontSizeSmall}"
+                           HorizontalAlignment="Center">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="{}{0:F0} u/s">
+                            <Binding Path="SpeedLimit" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+            </Grid>
+
+            <!-- Intensity -->
+            <Grid ColumnDefinitions="80,*,60">
+                <TextBlock Text="Intensity" VerticalAlignment="Center" />
+                <Slider Grid.Column="1" Minimum="10" Maximum="200"
+                        Value="{Binding Intensity}" />
+                <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="{StaticResource FontSizeSmall}"
+                           HorizontalAlignment="Center">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="{}{0:F0}%">
+                            <Binding Path="Intensity" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+            </Grid>
+
+            <!-- Edging Throttle -->
+            <Grid ColumnDefinitions="80,*,60,80,*,60">
+                <TextBlock Text="Edge Thr" VerticalAlignment="Center" ToolTip.Tip="Speed threshold (positions/sec). 0 = off." />
+                <Slider Grid.Column="1" Minimum="0" Maximum="500"
+                        Value="{Binding EdgeThreshold}" />
+                <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="{StaticResource FontSizeSmall}"
+                           HorizontalAlignment="Center">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="{}{0:F0} u/s">
+                            <Binding Path="EdgeThreshold" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+                <TextBlock Grid.Column="3" Text="Reduce" VerticalAlignment="Center" HorizontalAlignment="Center"
+                           ToolTip.Tip="How much to reduce movement above threshold (% of original)" />
+                <Slider Grid.Column="4" Minimum="10" Maximum="90"
+                        Value="{Binding EdgeReduction}" />
+                <TextBlock Grid.Column="5" VerticalAlignment="Center" FontSize="{StaticResource FontSizeSmall}"
+                           HorizontalAlignment="Center">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="{}{0:F0}%">
+                            <Binding Path="EdgeReduction" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+            </Grid>
+
+            <!-- Save preset with optional playlist association -->
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                <TextBlock Text="Save as:" VerticalAlignment="Center" FontSize="{StaticResource FontSizeSmall}" Margin="0,0,4,0" />
+                <TextBox Grid.Column="1" x:Name="PresetNameBox" Watermark="Preset name..."
+                         FontSize="{StaticResource FontSizeSmall}" Padding="4,2" />
+                <ComboBox Grid.Column="2" ItemsSource="{Binding AvailablePlaylists}"
+                          SelectedItem="{Binding SelectedPlaylistForPreset}"
+                          DisplayMemberBinding="{Binding Name}" Width="140"
+                          PlaceholderText="Auto-apply for..." FontSize="{StaticResource FontSizeSmall}" Margin="4,0"
+                          ToolTip.Tip="Link this preset to a playlist. When you play from that playlist, these override settings are applied automatically." />
+                <Button Grid.Column="3" Content="Save" FontSize="{StaticResource FontSizeSmall}" Padding="6,2"
+                        Command="{Binding SavePresetCommand}"
+                        CommandParameter="{Binding #PresetNameBox.Text}" />
+                <Button Grid.Column="4" Content="Del" FontSize="{StaticResource FontSizeSmall}" Padding="6,2" Margin="4,0,0,0"
+                        Command="{Binding DeletePresetCommand}" />
+            </Grid>
+        </StackPanel>
+    </Border>
+</UserControl>

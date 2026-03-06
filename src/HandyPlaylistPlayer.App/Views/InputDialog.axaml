@@ -1,0 +1,22 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="HandyPlaylistPlayer.App.Views.InputDialog"
+        Title="Input"
+        Icon="avares://HandyPlayer/Assets/app-icon.png"
+        Width="400" Height="180"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="BorderOnly">
+    <DockPanel Margin="20">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="10" Margin="0,15,0,0">
+            <Button Content="Cancel" Click="OnCancel" Width="80" />
+            <Button Content="OK" Click="OnConfirm" Width="80"
+                    Classes="accent" />
+        </StackPanel>
+        <StackPanel VerticalAlignment="Center" Spacing="10">
+            <TextBlock x:Name="PromptText" TextWrapping="Wrap" />
+            <TextBox x:Name="InputText" />
+        </StackPanel>
+    </DockPanel>
+</Window>

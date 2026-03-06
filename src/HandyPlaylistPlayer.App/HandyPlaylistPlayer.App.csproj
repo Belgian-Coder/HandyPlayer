@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <AssemblyName>HandyPlayer</AssemblyName>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Publishing settings for self-contained packages -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <SelfContained>true</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.7" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.7" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.7" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.7" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.2.7" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\app-icon.png" />
+  </ItemGroup>
+
+  <!-- Anime4K + FSR + CAS GLSL shaders — bundled with the app -->
+  <ItemGroup>
+    <Content Include="Assets\Shaders\Anime4K\*.glsl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- macOS app bundle configuration -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <CFBundleIconFile>app-icon.icns</CFBundleIconFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Info.plist" Condition="$([MSBuild]::IsOSPlatform('OSX'))" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HandyPlaylistPlayer.Core\HandyPlaylistPlayer.Core.csproj" />
+    <ProjectReference Include="..\HandyPlaylistPlayer.Media.Mpv\HandyPlaylistPlayer.Media.Mpv.csproj" />
+    <ProjectReference Include="..\HandyPlaylistPlayer.Devices.HandyApi\HandyPlaylistPlayer.Devices.HandyApi.csproj" />
+    <ProjectReference Include="..\HandyPlaylistPlayer.Devices.Intiface\HandyPlaylistPlayer.Devices.Intiface.csproj" />
+    <ProjectReference Include="..\HandyPlaylistPlayer.Storage\HandyPlaylistPlayer.Storage.csproj" />
+  </ItemGroup>
+</Project>

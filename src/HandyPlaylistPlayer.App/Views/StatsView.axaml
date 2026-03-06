@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HandyPlaylistPlayer.App.ViewModels"
+             x:Class="HandyPlaylistPlayer.App.Views.StatsView"
+             x:DataType="vm:StatsViewModel">
+    <ScrollViewer Margin="16">
+        <StackPanel Spacing="16">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <TextBlock Text="Statistics" FontSize="{StaticResource FontSizeHeading}" FontWeight="Bold"
+                           VerticalAlignment="Center" />
+                <Button Content="Refresh" Command="{Binding RefreshCommand}"
+                        FontSize="{StaticResource FontSizeSmall}" Padding="8,4" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <!-- Summary cards -->
+            <WrapPanel Orientation="Horizontal">
+                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        CornerRadius="{StaticResource RadiusMd}" Padding="{StaticResource CardPadding}" Margin="{StaticResource CardMargin}" MinWidth="140">
+                    <StackPanel>
+                        <TextBlock Text="{Binding TotalVideos}" FontSize="{StaticResource FontSizeStat}" FontWeight="Bold" />
+                        <TextBlock Text="Videos" FontSize="{StaticResource FontSizeSmall}" Opacity="0.6" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        CornerRadius="{StaticResource RadiusMd}" Padding="{StaticResource CardPadding}" Margin="{StaticResource CardMargin}" MinWidth="140">
+                    <StackPanel>
+                        <TextBlock Text="{Binding TotalScripts}" FontSize="{StaticResource FontSizeStat}" FontWeight="Bold" />
+                        <TextBlock Text="Scripts" FontSize="{StaticResource FontSizeSmall}" Opacity="0.6" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        CornerRadius="{StaticResource RadiusMd}" Padding="{StaticResource CardPadding}" Margin="{StaticResource CardMargin}" MinWidth="140">
+                    <StackPanel>
+                        <TextBlock Text="{Binding PairedCount}" FontSize="{StaticResource FontSizeStat}" FontWeight="Bold" />
+                        <TextBlock Text="Paired" FontSize="{StaticResource FontSizeSmall}" Opacity="0.6" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        CornerRadius="{StaticResource RadiusMd}" Padding="{StaticResource CardPadding}" Margin="{StaticResource CardMargin}" MinWidth="140">
+                    <StackPanel>
+                        <TextBlock Text="{Binding WatchedCount}" FontSize="{StaticResource FontSizeStat}" FontWeight="Bold" />
+                        <TextBlock Text="Watched" FontSize="{StaticResource FontSizeSmall}" Opacity="0.6" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        CornerRadius="{StaticResource RadiusMd}" Padding="{StaticResource CardPadding}" Margin="{StaticResource CardMargin}" MinWidth="140">
+                    <StackPanel>
+                        <TextBlock Text="{Binding PlaylistCount}" FontSize="{StaticResource FontSizeStat}" FontWeight="Bold" />
+                        <TextBlock Text="Playlists" FontSize="{StaticResource FontSizeSmall}" Opacity="0.6" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        CornerRadius="{StaticResource RadiusMd}" Padding="{StaticResource CardPadding}" Margin="{StaticResource CardMargin}" MinWidth="140">
+                    <StackPanel>
+                        <TextBlock Text="{Binding TotalPlays}" FontSize="{StaticResource FontSizeStat}" FontWeight="Bold" />
+                        <TextBlock Text="Total Plays" FontSize="{StaticResource FontSizeSmall}" Opacity="0.6" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        CornerRadius="{StaticResource RadiusMd}" Padding="{StaticResource CardPadding}" Margin="{StaticResource CardMargin}" MinWidth="140">
+                    <StackPanel>
+                        <TextBlock Text="{Binding TotalWatchTime}" FontSize="{StaticResource FontSizeStat}" FontWeight="Bold" />
+                        <TextBlock Text="Watch Time" FontSize="{StaticResource FontSizeSmall}" Opacity="0.6" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        CornerRadius="{StaticResource RadiusMd}" Padding="{StaticResource CardPadding}" Margin="{StaticResource CardMargin}" MinWidth="140">
+                    <StackPanel>
+                        <TextBlock Text="{Binding TotalLibrarySize}" FontSize="{StaticResource FontSizeStat}" FontWeight="Bold" />
+                        <TextBlock Text="Library Size" FontSize="{StaticResource FontSizeSmall}" Opacity="0.6" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        CornerRadius="{StaticResource RadiusMd}" Padding="{StaticResource CardPadding}" Margin="{StaticResource CardMargin}" MinWidth="140">
+                    <StackPanel>
+                        <TextBlock Text="{Binding TotalLibraryDuration}" FontSize="{StaticResource FontSizeStat}" FontWeight="Bold" />
+                        <TextBlock Text="Library Duration" FontSize="{StaticResource FontSizeSmall}" Opacity="0.6" />
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+
+            <!-- Recent playback history -->
+            <TextBlock Text="Recent Playback" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
+            <DataGrid ItemsSource="{Binding RecentHistory}"
+                      AutoGenerateColumns="False" IsReadOnly="True"
+                      GridLinesVisibility="Horizontal"
+                      MaxHeight="400">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Filename" Binding="{Binding Filename}" Width="3*" />
+                    <DataGridTextColumn Header="Played" Binding="{Binding StartedAt, StringFormat=\{0:g\}}" Width="160" />
+                    <DataGridTextColumn Header="Duration" Binding="{Binding DurationMs, Converter={x:Static vm:StatsViewModel.MsDurationConverter}}" Width="100" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

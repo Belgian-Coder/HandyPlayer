@@ -1,0 +1,82 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+*.nupkg
+*.snupkg
+project.lock.json
+*.nuget.props
+*.nuget.targets
+
+## Rider
+.idea/
+*.sln.iml
+
+## VS Code
+.vscode/
+
+## macOS
+.DS_Store
+Thumbs.db
+
+## Logs
+logs/
+*.log
+
+## SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+## LibVLC native binaries (downloaded by NuGet)
+libvlc/
+
+## Publish output
+publish/
+
+## User-specific files
+*.rsuser
+*.suo
+*.cache
+
+## NuGet
+packages/
+*.nupkg
+!*.nupkg.metadata
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Test results
+[Tt]est[Rr]esult*/
+*.trx
+coverage*/
+
+## WiX Toolset cache
+.wix/
+
+## Native runtime binaries (too large for git; download separately or use Git LFS)
+## Directory structure preserved via .gitkeep files
+src/HandyPlaylistPlayer.Media.Mpv/runtimes/*/native/*.dll
+src/HandyPlaylistPlayer.Media.Mpv/runtimes/*/native/*.dylib
+src/HandyPlaylistPlayer.Media.Mpv/runtimes/*/native/*.so
+src/HandyPlaylistPlayer.Media.Mpv/runtimes/*/native/*.so.*
+
+## Claude Code
+.claude/

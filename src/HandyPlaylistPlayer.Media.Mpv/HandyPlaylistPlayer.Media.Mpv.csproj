@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.7" />
+    <ProjectReference Include="..\HandyPlaylistPlayer.Core\HandyPlaylistPlayer.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Windows x64 native binary -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))">
+    <None Include="runtimes\win-x64\native\libmpv-2.dll"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="libmpv-2.dll"
+          Condition="Exists('runtimes\win-x64\native\libmpv-2.dll')" />
+  </ItemGroup>
+
+  <!-- macOS arm64 native binary (copy from Homebrew: brew install mpv) -->
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('osx-arm64'))">
+    <None Include="runtimes\osx-arm64\native\libmpv.2.dylib"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="libmpv.2.dylib"
+          Condition="Exists('runtimes\osx-arm64\native\libmpv.2.dylib')" />
+  </ItemGroup>
+
+  <!-- macOS x64 native binary -->
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('osx-x64'))">
+    <None Include="runtimes\osx-x64\native\libmpv.2.dylib"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="libmpv.2.dylib"
+          Condition="Exists('runtimes\osx-x64\native\libmpv.2.dylib')" />
+  </ItemGroup>
+
+  <!--
+    Linux: libmpv is normally installed via the system package manager and found
+    automatically (apt install libmpv2 / pacman -S mpv / dnf install mpv-libs).
+    If you need to bundle it (e.g. for a portable AppImage), copy the .so here:
+      runtimes/linux-x64/native/libmpv.so.2   (x86-64)
+      runtimes/linux-arm64/native/libmpv.so.2 (arm64)
+    The NativeLibrary resolver in MpvInterop.cs searches for it automatically.
+  -->
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux-x64'))">
+    <None Include="runtimes\linux-x64\native\libmpv.so.2"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="libmpv.so.2"
+          Condition="Exists('runtimes\linux-x64\native\libmpv.so.2')" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux-arm64'))">
+    <None Include="runtimes\linux-arm64\native\libmpv.so.2"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="libmpv.so.2"
+          Condition="Exists('runtimes\linux-arm64\native\libmpv.so.2')" />
+  </ItemGroup>
+
+</Project>

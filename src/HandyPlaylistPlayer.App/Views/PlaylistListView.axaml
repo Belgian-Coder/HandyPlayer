@@ -1,0 +1,160 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HandyPlaylistPlayer.App.ViewModels"
+             xmlns:m="using:HandyPlaylistPlayer.Core.Models"
+             x:Class="HandyPlaylistPlayer.App.Views.PlaylistListView"
+             x:DataType="vm:PlaylistListViewModel">
+    <Grid ColumnDefinitions="250,*" Margin="16">
+        <!-- Playlist sidebar -->
+        <DockPanel Grid.Column="0" Margin="0,0,12,0">
+            <TextBlock DockPanel.Dock="Top" Text="{Binding StatusText}"
+                       FontSize="{StaticResource FontSizeHeading}" FontWeight="Bold" Margin="0,0,0,8" />
+
+            <!-- Create new -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                <TextBox Grid.Column="0" Text="{Binding NewPlaylistName}"
+                         Watermark="New playlist..." />
+                <Button Grid.Column="1" Content="+" Margin="4,0,0,0"
+                        Command="{Binding CreatePlaylistCommand}"
+                        ToolTip.Tip="Create static playlist" />
+            </Grid>
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,8">
+                <Button Content="+ Smart" FontSize="{StaticResource FontSizeSmall}" Padding="6,2" MinWidth="0" MinHeight="0"
+                        Command="{Binding CreateSmartPlaylistCommand}"
+                        ToolTip.Tip="Create filter-based auto-playlist (unwatched, paired, etc.)" />
+                <Button Content="+ Folder" FontSize="{StaticResource FontSizeSmall}" Padding="6,2" MinWidth="0" MinHeight="0"
+                        x:Name="CreateFolderBtn" Click="OnCreateFolderPlaylistClick"
+                        ToolTip.Tip="Create playlist from a folder" />
+            </StackPanel>
+
+            <ListBox ItemsSource="{Binding Playlists}"
+                     SelectedItem="{Binding SelectedPlaylist}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="m:Playlist">
+                        <Grid ColumnDefinitions="*,Auto,Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{Binding ItemCount, StringFormat='({0})'}"
+                                       FontSize="10" Opacity="0.6"
+                                       VerticalAlignment="Center" Margin="6,0,4,0" />
+                            <TextBlock Grid.Column="2" Text="{Binding Type}"
+                                       FontSize="10" Opacity="0.5"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+
+        <!-- Playlist detail -->
+        <DockPanel Grid.Column="1">
+            <!-- Playlist name + rename -->
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                <TextBlock Text="{Binding SelectedPlaylist.Name}" FontSize="{StaticResource FontSizeTitle}" FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding !IsRenaming}" />
+                <Button Content="Rename" FontSize="{StaticResource FontSizeSmall}" Padding="6,2" MinWidth="0" MinHeight="0"
+                        Command="{Binding StartRenameCommand}"
+                        IsVisible="{Binding !IsRenaming}" />
+                <TextBox Text="{Binding RenameText}" Width="200"
+                         IsVisible="{Binding IsRenaming}" />
+                <Button Content="OK" FontSize="{StaticResource FontSizeSmall}" Padding="6,2" MinWidth="0" MinHeight="0"
+                        Command="{Binding ConfirmRenameCommand}"
+                        IsVisible="{Binding IsRenaming}" />
+                <Button Content="Cancel" FontSize="{StaticResource FontSizeSmall}" Padding="6,2" MinWidth="0" MinHeight="0"
+                        Command="{Binding CancelRenameCommand}"
+                        IsVisible="{Binding IsRenaming}" />
+            </StackPanel>
+
+            <!-- Action buttons -->
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                <Button Content="Play All" Command="{Binding PlayAllCommand}" />
+                <Button Content="Shuffle Play" Command="{Binding ShufflePlayCommand}" />
+                <Button Content="Export M3U" Command="{Binding ExportM3UCommand}"
+                        FontSize="{StaticResource FontSizeSmall}" Padding="8,4"
+                        ToolTip.Tip="Export playlist as .m3u file"
+                        IsVisible="{Binding SelectedPlaylist, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                <Button Content="Import M3U" Command="{Binding ImportM3UCommand}"
+                        FontSize="{StaticResource FontSizeSmall}" Padding="8,4"
+                        ToolTip.Tip="Import an .m3u file as a new playlist" />
+                <Button Content="Delete Playlist"
+                        Command="{Binding DeletePlaylistCommand}"
+                        CommandParameter="{Binding SelectedPlaylist}" />
+            </StackPanel>
+
+            <!-- Search + bulk actions toolbar -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,4">
+                <TextBox Grid.Column="0" Text="{Binding PlaylistItemFilter}"
+                         Watermark="Search items…" />
+                <Button Grid.Column="1" Content="Select All"
+                        FontSize="{StaticResource FontSizeSmall}" Padding="8,4" Margin="4,0,0,0"
+                        MinWidth="0" MinHeight="0"
+                        Click="OnSelectAllClick"
+                        ToolTip.Tip="Select all visible items" />
+                <Button Grid.Column="2" Content="Delete Selected"
+                        FontSize="{StaticResource FontSizeSmall}" Padding="8,4" Margin="4,0,0,0"
+                        MinWidth="0" MinHeight="0"
+                        Click="OnDeleteSelectedClick"
+                        ToolTip.Tip="Remove selected items from playlist" />
+            </Grid>
+
+            <Panel>
+                <ListBox x:Name="PlaylistItemsList"
+                         ItemsSource="{Binding FilteredPlaylistItems}"
+                         SelectedItem="{Binding SelectedPlaylistItem}"
+                         SelectionMode="Multiple">
+                    <ListBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Move Up"
+                                      Command="{Binding MoveItemUpCommand}"
+                                      CommandParameter="{Binding SelectedPlaylistItem}" />
+                            <MenuItem Header="Move Down"
+                                      Command="{Binding MoveItemDownCommand}"
+                                      CommandParameter="{Binding SelectedPlaylistItem}" />
+                            <Separator />
+                            <MenuItem Header="Play Next"
+                                      Command="{Binding PlayNextItemCommand}"
+                                      CommandParameter="{Binding SelectedPlaylistItem}" />
+                            <Separator />
+                            <MenuItem Header="Remove from Playlist"
+                                      Command="{Binding RemovePlaylistItemCommand}"
+                                      CommandParameter="{Binding SelectedPlaylistItem}" />
+                        </ContextMenu>
+                    </ListBox.ContextMenu>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="m:MediaItem">
+                            <Grid ColumnDefinitions="3*,60,2*">
+                                <TextBlock Grid.Column="0" Text="{Binding Filename}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="1" Text="{Binding Extension}"
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.6"
+                                           VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding FullPath}"
+                                           FontSize="{StaticResource FontSizeSmall}" Opacity="0.5"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Drop indicator line for drag-to-reorder -->
+                <Border x:Name="DropIndicator" IsVisible="False" IsHitTestVisible="False"
+                        Height="2" HorizontalAlignment="Stretch" VerticalAlignment="Top"
+                        Background="{DynamicResource AccentBrush}" />
+
+                <!-- Drag ghost label -->
+                <Border x:Name="DragGhost" IsVisible="False" IsHitTestVisible="False"
+                        HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Background="{DynamicResource SurfaceBrush}" Opacity="0.85"
+                        Padding="8,4" CornerRadius="4"
+                        BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
+                        MaxWidth="200">
+                    <TextBlock x:Name="DragGhostText"
+                               FontSize="{StaticResource FontSizeBody}"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource TextFgBrush}" />
+                </Border>
+            </Panel>
+        </DockPanel>
+    </Grid>
+</UserControl>
