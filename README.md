@@ -4,6 +4,11 @@ Cross-platform desktop app for controlling **The Handy** using Funscript playbac
 
 Built with **.NET 10**, **Avalonia UI**, and **libmpv** (via P/Invoke).
 
+** Important! **
+This project was created in 6 days with the use of LLMs, to help me test out some methodologies and explore some of the limits of current models.
+No plans on maintaining this applicatino in the future, feel free to adapt and redistribute.
+
+
 ## Features
 
 ### Video Playback
