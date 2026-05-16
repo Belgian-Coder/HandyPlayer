@@ -13,6 +13,8 @@ No plans on maintaining this applicatino in the future, feel free to adapt and r
 
 ### Video Playback
 
+![Now Playing screen with demo playback and transport controls](images/screenshots/now-playing.png)
+
 - **Embedded video player** powered by libmpv (MP4, MKV, WebM, and more)
 - Standard transport controls with icon buttons: play/pause, seek forward/backward, next/previous, fullscreen toggle
 - **Fullscreen mode** — double-click video, press `F11`/`F`, or click the fullscreen button
@@ -60,6 +62,8 @@ No plans on maintaining this applicatino in the future, feel free to adapt and r
 
 ### Library Management
 
+![Library screen with the bundled demo folder loaded and paired scripts](images/screenshots/library.png)
+
 - Add multiple library root folders (local drives, SMB shares, mapped network drives)
 - Automatic recursive scanning of video and script files
 - Resilient scanning: tolerates network disconnects, permission errors, timeouts
@@ -90,6 +94,8 @@ Manual pairings override auto-pairing and are never replaced.
 Per-video script offset can be saved to a pairing for automatic recall on future plays.
 
 ### Playlists & Queue
+
+![Playlists screen with the bundled demo videos in an active Demo Set playlist](images/screenshots/playlists.png)
 
 - Create, rename, and delete playlists
 - **Static playlists** — manually curated with drag-drop reordering
@@ -132,6 +138,8 @@ Access the override panel from the player controls or press `O`. These controls 
 
 ### Pattern Mode
 
+![Pattern Mode screen with sine pattern controls](images/screenshots/patterns.png)
+
 Generate device patterns without loading a video:
 
 - **Pattern Types**: Sine, Sawtooth, Square, Triangle, Random
@@ -147,6 +155,8 @@ Generate device patterns without loading a video:
 - Playback duration tracking
 
 ### Settings
+
+![Settings Appearance tab showing theme and accent color controls](images/screenshots/settings.png)
 
 Organized into tabbed sections:
 
