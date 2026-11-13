@@ -37,6 +37,16 @@ public class DispatcherTests
             => Task.FromResult($"result:{query.Id}");
     }
 
+    private record CancelingCommand : ICommand<string>;
+    private class SyncCancelingHandler : ICommandHandler<CancelingCommand, string>
+    {
+        public Task<string> HandleAsync(CancelingCommand command, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested(); // throws synchronously, not inside an async method
+            return Task.FromResult("unreachable");
+        }
+    }
+
     // Test validators
     private class AlwaysPassValidator : IValidator<TestCommand>
     {
@@ -198,5 +208,19 @@ public class DispatcherTests
         var b = default(Unit);
 
         Assert.Equal(a, b);
+    }
+
+    [Fact]
+    public async Task SendAsync_SynchronousCancellation_ReturnsCanceledTask()
+    {
+        var dispatcher = BuildDispatcher(s =>
+            s.AddTransient<ICommandHandler<CancelingCommand, string>, SyncCancelingHandler>());
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var task = dispatcher.SendAsync(new CancelingCommand(), cts.Token);
+
+        Assert.True(task.IsCanceled);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
     }
 }

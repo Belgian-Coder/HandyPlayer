@@ -112,7 +112,7 @@ public class FilenameNormalizer : IFilenameNormalizer
     private static bool IsBoundaryWordChar(char c)
     {
         if (char.IsAscii(c)) return char.IsAsciiLetterOrDigit(c) || c == '_';
-        if (c == '‍' || c == '‌') return true;
+        if (c == '\u200D' || c == '\u200C') return true;
 
         return char.GetUnicodeCategory(c) is
             UnicodeCategory.UppercaseLetter or UnicodeCategory.LowercaseLetter or UnicodeCategory.TitlecaseLetter

@@ -15,9 +15,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 # The libraries must be built for both net10.0 and net11.0 (see Directory.Build.props).
-$env:HandyMultiTarget = 'true'
-$env:HandyRuntimeAsync = $RuntimeAsync
+# Passed as MSBuild properties (not env vars) so nothing leaks into later builds in the same shell.
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $proj = Join-Path $Root 'benchmarks\HandyPlaylistPlayer.Benchmarks\HandyPlaylistPlayer.Benchmarks.csproj'
-dotnet run -c Release -f $Framework --project $proj -- --filter $Filter --artifacts $OutDir
+dotnet run -c Release -f $Framework --project $proj -p:HandyMultiTarget=true -p:HandyRuntimeAsync=$RuntimeAsync -- --filter $Filter --artifacts $OutDir

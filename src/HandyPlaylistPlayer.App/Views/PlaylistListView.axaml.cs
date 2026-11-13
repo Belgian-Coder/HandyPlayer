@@ -12,7 +12,7 @@ namespace HandyPlaylistPlayer.App.Views;
 
 public partial class PlaylistListView : UserControl
 {
-    private static readonly DataFormat<string> DragFormat = DataFormat.CreateStringApplicationFormat("HandyPlayer.PlaylistItemIndex");
+    private static readonly DataFormat<string> DragFormat = DataFormat.CreateInProcessFormat<string>("HandyPlayer.PlaylistItemIndex");
     private const double DragThresholdPixels = 8;
     private Point _dragStartPoint;
     private PointerPressedEventArgs? _dragStartArgs;
@@ -148,7 +148,8 @@ public partial class PlaylistListView : UserControl
         if (index < 0) return;
 
         var pressArgs = _dragStartArgs;
-        if (pressArgs == null) return;
+        // Only start from the press that began this gesture (stale args from an earlier press are ignored).
+        if (pressArgs == null || pressArgs.Pointer != e.Pointer) return;
 
         _isDragging = true;
         DragGhostText.Text = item.Filename;
@@ -164,6 +165,7 @@ public partial class PlaylistListView : UserControl
         finally
         {
             _isDragging = false;
+            _dragStartArgs = null;
             HideDragVisuals();
         }
     }

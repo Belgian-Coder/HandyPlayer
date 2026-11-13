@@ -136,8 +136,11 @@ public class FunscriptHeatmap : Control
     // Loop-boundary triangles are built once in local coordinates and positioned with a transform,
     // so Render() allocates no geometry per frame. Index: [isStart ? 0 : 1].
     private const double TriangleSize = 6;
-    private static readonly StreamGeometry[] TopTriangles = [CreateTriangle(1, 1), CreateTriangle(-1, 1)];
-    private static readonly StreamGeometry[] BottomTriangles = [CreateTriangle(1, -1), CreateTriangle(-1, -1)];
+    // Created lazily (on the render thread) rather than in a static initializer, so touching the type before the
+    // Avalonia platform is up cannot leave it permanently broken with a TypeInitializationException.
+    private static StreamGeometry[]? _topTriangles, _bottomTriangles;
+    private static StreamGeometry[] TopTriangles => _topTriangles ??= [CreateTriangle(1, 1), CreateTriangle(-1, 1)];
+    private static StreamGeometry[] BottomTriangles => _bottomTriangles ??= [CreateTriangle(1, -1), CreateTriangle(-1, -1)];
 
     private static StreamGeometry CreateTriangle(int dirX, int dirY)
     {

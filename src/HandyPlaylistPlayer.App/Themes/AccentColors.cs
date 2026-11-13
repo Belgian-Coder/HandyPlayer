@@ -5,8 +5,9 @@ namespace HandyPlaylistPlayer.App.Themes;
 
 public record AccentColorOption(string Name, Color Primary, Color Dark)
 {
-    /// <summary>Pre-built brush for AXAML compiled-binding use (Border.Background etc.).</summary>
-    public Avalonia.Media.IBrush PrimaryBrush { get; } = new SolidColorBrush(Primary);
+    /// <summary>Pre-built brush for AXAML compiled-binding use (Border.Background etc.).
+    /// Immutable so it has no dispatcher affinity: AccentColors is a static that may be first touched off the UI thread.</summary>
+    public Avalonia.Media.IBrush PrimaryBrush { get; } = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Primary);
 }
 
 public static class AccentColors

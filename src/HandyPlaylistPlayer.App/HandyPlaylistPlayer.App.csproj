@@ -37,6 +37,14 @@
     </Content>
   </ItemGroup>
 
+  <!-- SkiaSharp/HarfBuzzSharp 3.x ship ~100 MB of native debug symbols (lib*.pdb); keep them out of the publish output/installer. -->
+  <Target Name="ExcludeNativeDebugSymbolsFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Extension)' == '.pdb' And $([System.String]::Copy('%(Filename)').StartsWith('lib'))" />
+    </ItemGroup>
+  </Target>
+
   <!-- macOS app bundle configuration -->
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
     <CFBundleIconFile>app-icon.icns</CFBundleIconFile>

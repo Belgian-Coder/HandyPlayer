@@ -17,6 +17,10 @@ public class Dispatcher(IServiceProvider services) : IDispatcher
             var pipeline = CommandPipelines<TResult>.Cache.GetOrAdd(command.GetType(), CommandPipelines<TResult>.Create);
             return pipeline.SendAsync(services, command, ct);
         }
+        catch (OperationCanceledException oce)
+        {
+            return Canceled<TResult>(oce);
+        }
         catch (Exception ex)
         {
             return Task.FromException<TResult>(ex);
@@ -30,10 +34,22 @@ public class Dispatcher(IServiceProvider services) : IDispatcher
             var pipeline = QueryPipelines<TResult>.Cache.GetOrAdd(query.GetType(), QueryPipelines<TResult>.Create);
             return pipeline.QueryAsync(services, query, ct);
         }
+        catch (OperationCanceledException oce)
+        {
+            return Canceled<TResult>(oce);
+        }
         catch (Exception ex)
         {
             return Task.FromException<TResult>(ex);
         }
+    }
+
+    // Keep async-method semantics: a synchronously thrown OperationCanceledException yields a Canceled task, not a Faulted one.
+    private static Task<TResult> Canceled<TResult>(OperationCanceledException oce)
+    {
+        var tcs = new TaskCompletionSource<TResult>();
+        tcs.SetCanceled(oce.CancellationToken);
+        return tcs.Task;
     }
 
     // ---- commands ----

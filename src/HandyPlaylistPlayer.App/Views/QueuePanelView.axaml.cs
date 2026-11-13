@@ -9,7 +9,7 @@ namespace HandyPlaylistPlayer.App.Views;
 
 public partial class QueuePanelView : UserControl
 {
-    private static readonly DataFormat<string> DragFormat = DataFormat.CreateStringApplicationFormat("HandyPlayer.QueueItemIndex");
+    private static readonly DataFormat<string> DragFormat = DataFormat.CreateInProcessFormat<string>("HandyPlayer.QueueItemIndex");
     private const double DragThresholdPixels = 8;
     private Point _dragStartPoint;
     private PointerPressedEventArgs? _dragStartArgs;
@@ -80,7 +80,8 @@ public partial class QueuePanelView : UserControl
         if (index < 0) return;
 
         var pressArgs = _dragStartArgs;
-        if (pressArgs == null) return;
+        // Only start from the press that began this gesture (stale args from an earlier press are ignored).
+        if (pressArgs == null || pressArgs.Pointer != e.Pointer) return;
 
         _isDragging = true;
         _draggingItem = item;
@@ -100,6 +101,7 @@ public partial class QueuePanelView : UserControl
         finally
         {
             _isDragging = false;
+            _dragStartArgs = null;
             if (_draggingItem != null) { _draggingItem.IsDraggingThis = false; _draggingItem = null; }
             HideDragVisuals();
         }

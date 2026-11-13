@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <!-- Default target. Set HandyMultiTarget=true (env var or -p:) to build the libraries for net10.0 AND net11.0;
+    <!-- Default target. Set -p:HandyMultiTarget=true to build the libraries for net10.0 AND net11.0;
          used by benchmarks/HandyPlaylistPlayer.Benchmarks so the same code can be compared across runtimes. -->
     <TargetFramework Condition="'$(HandyMultiTarget)' != 'true'">net11.0</TargetFramework>
     <TargetFrameworks Condition="'$(HandyMultiTarget)' == 'true'">net10.0;net11.0</TargetFrameworks>
@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <!-- .NET 11 runtime async: async methods are implemented by the runtime instead of compiler-generated state machines.
-       Set HandyRuntimeAsync=off (env var or -p:) to compile without it (A/B comparisons). -->
+       Set -p:HandyRuntimeAsync=off to compile without it (A/B comparisons). -->
   <PropertyGroup Condition="'$(HandyRuntimeAsync)' != 'off' And '$(TargetFramework)' != 'net10.0'">
     <Features>$(Features);runtime-async=on</Features>
   </PropertyGroup>

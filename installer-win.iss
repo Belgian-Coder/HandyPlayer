@@ -7,7 +7,7 @@
 #define AppPublisher "HandyPlayer"
 #define AppURL "https://github.com/handyplayer"
 #define AppExeName "HandyPlayer.exe"
-#define SourceDir "publish\HandyPlayer-1.0.0-win-x64"
+#define SourceDir "publish\HandyPlayer-" + AppVersion + "-win-x64"
 
 [Setup]
 AppId={{B7E3A4F1-8C2D-4E5F-9A1B-3D6C8E2F7A94}
