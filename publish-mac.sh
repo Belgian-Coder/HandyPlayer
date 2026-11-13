@@ -17,19 +17,28 @@ echo "========================================="
 echo "Building $APP_NAME v$VERSION for macOS ARM64"
 echo "========================================="
 
-# Clean previous output
-rm -rf "$PUBLISH_DIR" "$APP_BUNDLE"
+# PREBUILT_DIR: optional folder with an osx-arm64 publish produced elsewhere (e.g. cross-published on
+# Windows with: dotnet publish src/HandyPlaylistPlayer.App -c Release -r osx-arm64 --self-contained -o <dir>).
+# Then only bundling/signing/packaging runs here and no .NET SDK is needed on the Mac.
+rm -rf "$APP_BUNDLE"
+if [ -n "$PREBUILT_DIR" ]; then
+    echo "Using prebuilt publish output: $PREBUILT_DIR"
+    PUBLISH_DIR="$PREBUILT_DIR"
+    KEEP_PUBLISH_DIR=1
+else
+    rm -rf "$PUBLISH_DIR"
 
-# Publish self-contained
-dotnet publish src/HandyPlaylistPlayer.App \
-    -c "$CONFIGURATION" \
-    -r "$RID" \
-    --self-contained \
-    -o "$PUBLISH_DIR"
+    # Publish self-contained
+    dotnet publish src/HandyPlaylistPlayer.App \
+        -c "$CONFIGURATION" \
+        -r "$RID" \
+        --self-contained \
+        -o "$PUBLISH_DIR"
 
-if [ $? -ne 0 ]; then
-    echo "ERROR: dotnet publish failed!"
-    exit 1
+    if [ $? -ne 0 ]; then
+        echo "ERROR: dotnet publish failed!"
+        exit 1
+    fi
 fi
 
 echo ""
@@ -42,6 +51,7 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 # Copy published files into the bundle
 cp -R "$PUBLISH_DIR/"* "$APP_BUNDLE/Contents/MacOS/"
 chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+[ -f "$APP_BUNDLE/Contents/MacOS/createdump" ] && chmod +x "$APP_BUNDLE/Contents/MacOS/createdump"
 
 # --- Bundle libmpv and ALL its dependencies from Homebrew ---
 BREW_PREFIX=$(brew --prefix 2>/dev/null || echo "")
@@ -242,8 +252,8 @@ else
     echo "  WARNING: DMG creation failed"
 fi
 
-# Clean intermediate publish dir
-rm -rf "$PUBLISH_DIR"
+# Clean intermediate publish dir (never a caller-supplied prebuilt folder)
+[ -z "$KEEP_PUBLISH_DIR" ] && rm -rf "$PUBLISH_DIR"
 
 echo ""
 echo "========================================="
