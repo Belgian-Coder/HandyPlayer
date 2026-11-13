@@ -122,12 +122,43 @@ else
     echo "  Install with: brew install mpv"
 fi
 
-# Ad-hoc sign all native libraries (required on Apple Silicon)
+# Ad-hoc sign every native binary (required on Apple Silicon). install_name_tool invalidates the
+# signatures of the bundled Homebrew libraries, and not all of them end in .dylib (e.g. the Python
+# framework binary pulled in via vapoursynth), so select by Mach-O type, not by extension.
 echo ""
 echo "--- Signing ---"
-find "$APP_BUNDLE/Contents/MacOS" -name "*.dylib" -exec codesign --force --sign - {} \;
-codesign --force --sign - "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
-echo "  Signed all binaries"
+SIGN_FAILED=0
+for f in "$MACOS_DIR"/*; do
+    [ -f "$f" ] || continue
+    [ "$(basename "$f")" = "$APP_NAME" ] && continue
+    file -b "$f" | grep -q '^Mach-O' || continue
+    codesign --force --sign - "$f" || SIGN_FAILED=1
+done
+# The apphost must be signed outside the bundle: inside it, codesign treats the managed .dll files
+# next to it as unsigned nested code and refuses.
+APPHOST_TMP=$(mktemp -d)
+cp "$MACOS_DIR/$APP_NAME" "$APPHOST_TMP/$APP_NAME"
+codesign --force --sign - --identifier com.handyplayer.app "$APPHOST_TMP/$APP_NAME" || SIGN_FAILED=1
+codesign --verify --strict "$APPHOST_TMP/$APP_NAME" || SIGN_FAILED=1
+cp "$APPHOST_TMP/$APP_NAME" "$MACOS_DIR/$APP_NAME"
+rm -rf "$APPHOST_TMP"
+
+# Verify: macOS kills the process (SIGKILL, Code Signature Invalid) when it loads a binary whose
+# signature does not match, so a single bad library makes the app crash on first video load.
+for f in "$MACOS_DIR"/*; do
+    [ -f "$f" ] || continue
+    [ "$(basename "$f")" = "$APP_NAME" ] && continue
+    file -b "$f" | grep -q '^Mach-O' || continue
+    if ! codesign --verify --strict "$f" 2>/dev/null; then
+        echo "  ERROR: invalid signature: $(basename "$f")"
+        SIGN_FAILED=1
+    fi
+done
+if [ "$SIGN_FAILED" -ne 0 ]; then
+    echo "ERROR: code signing failed"
+    exit 1
+fi
+echo "  Signed and verified all native binaries"
 
 # Generate .icns from PNG using macOS native tools
 # Try multiple icon source locations
