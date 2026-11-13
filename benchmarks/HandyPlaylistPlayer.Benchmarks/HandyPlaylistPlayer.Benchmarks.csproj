@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Multi-target so the same benchmark code runs on net10.0 and net11.0.
+         The referenced libraries are multi-targeted via HandyMultiTarget=true (see Directory.Build.props);
+         run-benchmarks.ps1 sets it. -->
+    <TargetFramework></TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <Optimize>true</Optimize>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.16.0-preview.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HandyPlaylistPlayer.Core\HandyPlaylistPlayer.Core.csproj" />
+    <ProjectReference Include="..\..\src\HandyPlaylistPlayer.Storage\HandyPlaylistPlayer.Storage.csproj" />
+    <ProjectReference Include="..\..\src\HandyPlaylistPlayer.Devices.HandyApi\HandyPlaylistPlayer.Devices.HandyApi.csproj" />
+    <ProjectReference Include="..\..\src\HandyPlaylistPlayer.Devices.Intiface\HandyPlaylistPlayer.Devices.Intiface.csproj" />
+  </ItemGroup>
+
+  <Target Name="RequireHandyMultiTarget" BeforeTargets="BeforeBuild;BeforeResolveReferences" Condition="'$(HandyMultiTarget)' != 'true'">
+    <Error Text="Build the benchmarks with HandyMultiTarget=true (use benchmarks/run-benchmarks.ps1, or set the HandyMultiTarget=true environment variable)." />
+  </Target>
+</Project>

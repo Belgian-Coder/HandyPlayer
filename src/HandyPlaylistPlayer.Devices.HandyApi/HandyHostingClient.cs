@@ -48,7 +48,7 @@ public class HandyHostingClient(
             response.EnsureSuccessStatusCode();
         }
 
-        var result = await response.Content.ReadFromJsonAsync<HandyHostingUploadResponse>(ct)
+        var result = await response.Content.ReadFromJsonAsync<HandyHostingUploadResponse>(HandyApiJson.Options, ct)
             ?? throw new InvalidOperationException("Empty hosting response");
 
         // Cache

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using HandyPlaylistPlayer.Core.Services;
 using HandyPlaylistPlayer.Core.Interfaces;
@@ -236,25 +237,8 @@ public class StreamingTickEngine : IDisposable
     /// Binary search for the last action whose timestamp is &lt;= timeMs.
     /// Returns -1 if timeMs is before all actions.
     /// </summary>
-    private static int FindCurrentIndex(long timeMs, IReadOnlyList<FunscriptAction> actions)
-    {
-        int lo = 0, hi = actions.Count - 1;
-        int result = -1;
-        while (lo <= hi)
-        {
-            int mid = (lo + hi) / 2;
-            if (actions[mid].At <= timeMs)
-            {
-                result = mid;
-                lo = mid + 1;
-            }
-            else
-            {
-                hi = mid - 1;
-            }
-        }
-        return result;
-    }
+    private static int FindCurrentIndex(long timeMs, List<FunscriptAction> actions)
+        => FunscriptInterpolator.FindCurrentIndexCore(timeMs, CollectionsMarshal.AsSpan(actions));
 
     private void WriteTrace(int tick, long wallMs, PlaybackState state, long vlcTime, long mediaTime,
         int actionIdx, long targetAt, int rawPos, int transformedPos, int durationMs, string sent)

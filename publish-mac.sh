@@ -10,7 +10,7 @@ CSPROJ="src/HandyPlaylistPlayer.App/HandyPlaylistPlayer.App.csproj"
 
 # Read version from csproj (sed works on both GNU and BSD/macOS)
 VERSION=$(sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' "$CSPROJ" | head -1)
-VERSION="${VERSION:-1.0.0}"
+VERSION="${VERSION:-1.1.0}"
 ARCHIVE_NAME="$APP_NAME-$VERSION-mac-arm64"
 
 echo "========================================="

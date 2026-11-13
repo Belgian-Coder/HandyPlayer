@@ -17,40 +17,23 @@ internal class HeadlessTestApp : Application
 }
 
 /// <summary>
-/// xUnit class fixture that starts a headless Avalonia runtime for one test class.
+/// xUnit class fixture that provides a headless Avalonia runtime for tests that need Application.Current.
+/// Avalonia 12 binds the UI Dispatcher to the thread that creates it, and xUnit runs each test class on
+/// its own thread, so the runtime lives in one process-wide <see cref="HeadlessUnitTestSession"/> with a
+/// dedicated UI thread; all Avalonia work is marshalled onto it via <see cref="RunOnUiThread"/>.
 /// Usage: add [Collection("Avalonia")] + IClassFixture&lt;AvaloniaTestFixture&gt; to your test class.
 /// </summary>
 public sealed class AvaloniaTestFixture : IDisposable
 {
-    public AvaloniaTestFixture()
-    {
-        // UseHeadlessDrawing = true is required: false skips rendering subsystem
-        // registration and causes "No rendering system configured" in SetupWithoutStarting().
-        AppBuilder.Configure<HeadlessTestApp>()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true })
-            .SetupWithoutStarting();
-    }
+    private static readonly Lazy<HeadlessUnitTestSession> Session =
+        new(() => HeadlessUnitTestSession.StartNew(typeof(HeadlessTestApp)));
 
     /// <summary>
-    /// Runs <paramref name="action"/> synchronously on the Avalonia UI dispatcher.
+    /// Runs <paramref name="action"/> synchronously on the Avalonia UI thread.
+    /// Exceptions (including failed assertions) are rethrown to the caller.
     /// </summary>
-    public void RunOnUiThread(Action action)
-    {
-        var dispatcher = Avalonia.Threading.Dispatcher.UIThread;
-        if (dispatcher.CheckAccess())
-        {
-            action();
-            return;
-        }
-
-        var tcs = new TaskCompletionSource();
-        dispatcher.Post(() =>
-        {
-            try { action(); tcs.SetResult(); }
-            catch (Exception ex) { tcs.SetException(ex); }
-        });
-        tcs.Task.GetAwaiter().GetResult();
-    }
+    public void RunOnUiThread(Action action) =>
+        Session.Value.Dispatch(action, CancellationToken.None).GetAwaiter().GetResult();
 
     public void Dispose() { }
 }

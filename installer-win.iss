@@ -3,7 +3,7 @@
 ; Run: iscc installer-win.iss (after running publish-win.ps1)
 
 #define AppName "HandyPlayer"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 #define AppPublisher "HandyPlayer"
 #define AppURL "https://github.com/handyplayer"
 #define AppExeName "HandyPlayer.exe"

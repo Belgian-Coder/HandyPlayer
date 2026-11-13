@@ -4,7 +4,7 @@ set -e
 
 CONFIGURATION="${1:-Release}"
 APP_NAME="HandyPlayer"
-VERSION="1.0.0"
+VERSION="1.1.0"
 RID="linux-x64"
 PORTABLE_DIR="publish/$APP_NAME-$VERSION-linux-x64"
 PUBLISH_DIR="publish/$RID-build"

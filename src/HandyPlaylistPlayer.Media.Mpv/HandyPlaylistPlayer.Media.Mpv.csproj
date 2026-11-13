@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.2.7" />
+    <PackageReference Include="Avalonia" Version="12.1.6" />
     <ProjectReference Include="..\HandyPlaylistPlayer.Core\HandyPlaylistPlayer.Core.csproj" />
   </ItemGroup>
 

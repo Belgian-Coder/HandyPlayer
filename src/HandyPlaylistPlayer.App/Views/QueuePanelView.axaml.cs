@@ -9,9 +9,10 @@ namespace HandyPlaylistPlayer.App.Views;
 
 public partial class QueuePanelView : UserControl
 {
-    private const string DragFormat = "QueueItemIndex";
+    private static readonly DataFormat<string> DragFormat = DataFormat.CreateStringApplicationFormat("HandyPlayer.QueueItemIndex");
     private const double DragThresholdPixels = 8;
     private Point _dragStartPoint;
+    private PointerPressedEventArgs? _dragStartArgs;
     private bool _isDragging;
     private QueueItemViewModel? _draggingItem;
     private int _dropInsertIndex = -1;
@@ -59,6 +60,7 @@ public partial class QueuePanelView : UserControl
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         _dragStartPoint = e.GetPosition(QueueList);
+        _dragStartArgs = e;
         _isDragging = false;
     }
 
@@ -77,6 +79,9 @@ public partial class QueuePanelView : UserControl
         var index = FindItemIndex(item);
         if (index < 0) return;
 
+        var pressArgs = _dragStartArgs;
+        if (pressArgs == null) return;
+
         _isDragging = true;
         _draggingItem = item;
         item.IsDraggingThis = true;
@@ -87,9 +92,9 @@ public partial class QueuePanelView : UserControl
 
         try
         {
-            var data = new DataObject();
-            data.Set(DragFormat, index);
-            await DragDrop.DoDragDrop(e, data, DragDropEffects.Move);
+            var data = new DataTransfer();
+            data.Add(DataTransferItem.Create(DragFormat, index.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            await DragDrop.DoDragDropAsync(pressArgs, data, DragDropEffects.Move);
         }
         catch (Exception) { /* drag cancelled or failed — not critical */ }
         finally
@@ -102,7 +107,7 @@ public partial class QueuePanelView : UserControl
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        if (!e.Data.Contains(DragFormat))
+        if (!e.DataTransfer.Contains(DragFormat))
         {
             e.DragEffects = DragDropEffects.None;
             HideDragVisuals();
@@ -110,7 +115,7 @@ public partial class QueuePanelView : UserControl
         }
         e.DragEffects = DragDropEffects.Move;
 
-        if (e.Data.Get(DragFormat) is not int srcIndex) return;
+        if (!int.TryParse(e.DataTransfer.TryGetValue(DragFormat), out var srcIndex)) return;
         if (DataContext is not QueuePanelViewModel vm) return;
 
         var pos = e.GetPosition(QueueList);
@@ -171,9 +176,9 @@ public partial class QueuePanelView : UserControl
     private void OnDrop(object? sender, DragEventArgs e)
     {
         HideDragVisuals();
-        if (!e.Data.Contains(DragFormat)) return;
+        if (!e.DataTransfer.Contains(DragFormat)) return;
         if (DataContext is not QueuePanelViewModel vm) return;
-        if (e.Data.Get(DragFormat) is not int oldIndex) return;
+        if (!int.TryParse(e.DataTransfer.TryGetValue(DragFormat), out var oldIndex)) return;
         if (_dropInsertIndex < 0) return;
 
         vm.MoveItem(oldIndex, _dropInsertIndex);

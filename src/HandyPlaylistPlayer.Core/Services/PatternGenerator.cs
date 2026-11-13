@@ -41,9 +41,9 @@ public class PatternGenerator
 
     private static List<FunscriptAction> GenerateSine(double freq, int min, int max, int durationMs)
     {
-        var actions = new List<FunscriptAction>();
         var periodMs = 1000.0 / freq;
         int step = Math.Max(20, (int)(periodMs / 20)); // ~20 points per cycle
+        var actions = new List<FunscriptAction>(durationMs / step + 1);
 
         for (long t = 0; t <= durationMs; t += step)
         {
@@ -57,10 +57,10 @@ public class PatternGenerator
 
     private static List<FunscriptAction> GenerateSawtooth(double freq, int min, int max, int durationMs)
     {
-        var actions = new List<FunscriptAction>();
         var periodMs = 1000.0 / freq;
 
         var sawStep = Math.Max(20, (int)(periodMs / 2));
+        var actions = new List<FunscriptAction>((int)(durationMs / sawStep) + 1);
         for (long t = 0; t <= durationMs; t += sawStep)
         {
             var phase = (t % (long)Math.Max(1, periodMs)) / periodMs;
@@ -72,8 +72,8 @@ public class PatternGenerator
 
     private static List<FunscriptAction> GenerateSquare(double freq, int min, int max, int durationMs)
     {
-        var actions = new List<FunscriptAction>();
         var halfPeriodMs = Math.Max(20, (long)(500.0 / freq));
+        var actions = new List<FunscriptAction>((int)(durationMs / halfPeriodMs) + 1);
 
         for (long t = 0; t <= durationMs; t += halfPeriodMs)
         {
@@ -86,8 +86,8 @@ public class PatternGenerator
 
     private static List<FunscriptAction> GenerateTriangle(double freq, int min, int max, int durationMs)
     {
-        var actions = new List<FunscriptAction>();
         var quarterPeriodMs = Math.Max(10, (long)(250.0 / freq));
+        var actions = new List<FunscriptAction>((int)(durationMs / quarterPeriodMs) + 1);
 
         for (long t = 0; t <= durationMs; t += quarterPeriodMs)
         {
@@ -109,8 +109,8 @@ public class PatternGenerator
     private static List<FunscriptAction> GenerateRandom(double freq, int min, int max, int durationMs, int? seed)
     {
         var rng = seed.HasValue ? new Random(seed.Value) : Random.Shared;
-        var actions = new List<FunscriptAction>();
         var intervalMs = Math.Max(20, (int)(500.0 / freq));
+        var actions = new List<FunscriptAction>(durationMs / intervalMs + 1);
 
         for (long t = 0; t <= durationMs; t += intervalMs)
         {

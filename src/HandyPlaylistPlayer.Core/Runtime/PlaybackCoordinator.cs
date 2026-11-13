@@ -8,7 +8,7 @@ public class PlaybackCoordinator : IPlaybackCoordinator, IDisposable
 {
     private readonly IFunscriptParser _parser;
     private readonly ILogger<PlaybackCoordinator> _logger;
-    private readonly object _engineLock = new();
+    private readonly Lock _engineLock = new();
     private readonly SemaphoreSlim _loadLock = new(1, 1);
     private volatile bool _isSeeking;
     private IMediaPlayer? _mediaPlayer;

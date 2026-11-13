@@ -126,7 +126,7 @@
             <!-- Save preset with optional playlist association -->
             <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
                 <TextBlock Text="Save as:" VerticalAlignment="Center" FontSize="{StaticResource FontSizeSmall}" Margin="0,0,4,0" />
-                <TextBox Grid.Column="1" x:Name="PresetNameBox" Watermark="Preset name..."
+                <TextBox Grid.Column="1" x:Name="PresetNameBox" PlaceholderText="Preset name..."
                          FontSize="{StaticResource FontSizeSmall}" Padding="4,2" />
                 <ComboBox Grid.Column="2" ItemsSource="{Binding AvailablePlaylists}"
                           SelectedItem="{Binding SelectedPlaylistForPreset}"

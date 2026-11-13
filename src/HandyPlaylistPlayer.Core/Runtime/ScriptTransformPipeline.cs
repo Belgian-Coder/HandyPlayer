@@ -11,19 +11,21 @@ public class ScriptTransformPipeline
 
     public int Transform(int rawPosition, long currentTimeMs)
     {
+        // Read the settings object once: one consistent snapshot per call (and one property read instead of ~15).
+        var settings = Settings;
         double pos = rawPosition;
 
         // 1. Invert
-        if (Settings.Invert)
+        if (settings.Invert)
             pos = 100.0 - pos;
 
         // 2. Range scaling
-        pos = Settings.RangeMin + (pos / 100.0) * (Settings.RangeMax - Settings.RangeMin);
+        pos = settings.RangeMin + (pos / 100.0) * (settings.RangeMax - settings.RangeMin);
 
         // 3. Intensity (scale deltas around midpoint)
-        if (Settings.Intensity is { } intensity && intensity != 1.0)
+        if (settings.Intensity is { } intensity && intensity != 1.0)
         {
-            var mid = (Settings.RangeMin + Settings.RangeMax) / 2.0;
+            var mid = (settings.RangeMin + settings.RangeMax) / 2.0;
             pos = mid + (pos - mid) * intensity;
         }
 
@@ -33,27 +35,27 @@ public class ScriptTransformPipeline
         // 5. Edging throttle — reduce movement when speed exceeds threshold
         var prevTime = Interlocked.Read(ref _previousTimeMs);
         var prevOutput = (int)Interlocked.Read(ref _previousOutput);
-        if (Settings.EdgeThreshold.HasValue && prevTime > 0)
+        if (settings.EdgeThreshold.HasValue && prevTime > 0)
         {
             var dt = currentTimeMs - prevTime;
             if (dt > 0)
             {
                 var speed = Math.Abs(pos - prevOutput) / dt * 1000.0; // positions/sec
-                if (speed > Settings.EdgeThreshold.Value)
+                if (speed > settings.EdgeThreshold.Value)
                 {
                     // Blend toward previous output by reduction factor
-                    pos = prevOutput + (pos - prevOutput) * Settings.EdgeReduction;
+                    pos = prevOutput + (pos - prevOutput) * settings.EdgeReduction;
                 }
             }
         }
 
         // 6. Speed limit
-        if (Settings.SpeedLimit.HasValue && prevTime > 0)
+        if (settings.SpeedLimit.HasValue && prevTime > 0)
         {
             var deltaTime = currentTimeMs - prevTime;
             if (deltaTime > 0)
             {
-                var maxDelta = Settings.SpeedLimit.Value * deltaTime / 1000.0;
+                var maxDelta = settings.SpeedLimit.Value * deltaTime / 1000.0;
                 var actualDelta = pos - prevOutput;
                 if (Math.Abs(actualDelta) > maxDelta)
                     pos = prevOutput + Math.Sign(actualDelta) * maxDelta;

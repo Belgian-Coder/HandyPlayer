@@ -2,7 +2,7 @@
 
 Cross-platform desktop app for controlling **The Handy** using Funscript playback with an embedded video player, playlists, auto-pairing, and network share support.
 
-Built with **.NET 10**, **Avalonia UI**, and **libmpv** (via P/Invoke).
+Built with **.NET 11**, **Avalonia UI**, and **libmpv** (via P/Invoke).
 
 **Important!**
 This project was created in 6 days with the use of LLMs, to help me test out some methodologies and explore some of the limits of current models.
@@ -251,12 +251,12 @@ Download the latest release for your platform. No .NET SDK or runtime installati
 #### Windows 11 (x64)
 
 **Portable (zip):**
-1. Download `HandyPlayer-1.0.0-win-x64.zip`
+1. Download `HandyPlayer-1.1.0-win-x64.zip`
 2. Extract to a folder of your choice (e.g. `C:\HandyPlayer\`)
 3. Run `HandyPlayer.exe`
 
 **Installer (msi):**
-1. Download `HandyPlayer-1.0.0-win-x64.msi`
+1. Download `HandyPlayer-1.1.0-win-x64.msi`
 2. Run the MSI installer and follow the prompts
 3. Launch from the Start menu
 
@@ -270,12 +270,12 @@ To build yourself:
 Requires macOS 12.0 (Monterey) or later.
 
 **Portable (zip):**
-1. Download `HandyPlayer-1.0.0-mac-arm64.zip`
+1. Download `HandyPlayer-1.1.0-mac-arm64.zip`
 2. Extract and drag `HandyPlayer.app` to `/Applications`
 3. On first launch, right-click → "Open" → click "Open" in the dialog (Gatekeeper requires this once for unsigned apps)
 
 **Installer (dmg):**
-1. Download `HandyPlayer-1.0.0-mac-arm64.dmg`
+1. Download `HandyPlayer-1.1.0-mac-arm64.dmg`
 2. Open the DMG and drag `HandyPlayer` to the `Applications` folder
 3. On first launch, right-click → "Open" → click "Open" in the dialog
 
@@ -292,14 +292,14 @@ chmod +x publish-mac.sh
 #### Linux (x64)
 
 **Portable (tar.gz):**
-1. Download `HandyPlayer-1.0.0-linux-x64.tar.gz`
-2. Extract: `tar -xzf HandyPlayer-1.0.0-linux-x64.tar.gz`
-3. Run: `./HandyPlayer-1.0.0-linux-x64/HandyPlayer`
+1. Download `HandyPlayer-1.1.0-linux-x64.tar.gz`
+2. Extract: `tar -xzf HandyPlayer-1.1.0-linux-x64.tar.gz`
+3. Run: `./HandyPlayer-1.1.0-linux-x64/HandyPlayer`
 4. Optional: run `./install.sh` to install to `~/.local/opt` with desktop entry
 
 **Debian/Ubuntu (.deb):**
-1. Download `handyplayer-1.0.0-linux-x64.deb`
-2. Install: `sudo dpkg -i handyplayer-1.0.0-linux-x64.deb`
+1. Download `handyplayer-1.1.0-linux-x64.deb`
+2. Install: `sudo dpkg -i handyplayer-1.1.0-linux-x64.deb`
 3. Launch from application menu or run `HandyPlayer`
 4. Uninstall: `sudo dpkg -r handyplayer`
 
@@ -324,7 +324,7 @@ If you want to use the Intiface/Buttplug backend instead of the direct Handy API
 
 ### Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0)
 - [Git](https://git-scm.com/)
 - **libmpv** — the native video playback library (platform-specific, see below)
 
@@ -417,8 +417,8 @@ Each platform has a publish script that produces a portable archive and an insta
 **Outputs:**
 | File | Type | Description |
 |---|---|---|
-| `publish/HandyPlayer-1.0.0-win-x64.zip` | Portable | Extract and run `HandyPlayer.exe` |
-| `publish/HandyPlayer-1.0.0-win-x64.msi` | Installer | Standard Windows MSI, installs to Program Files with Start Menu shortcut |
+| `publish/HandyPlayer-1.1.0-win-x64.zip` | Portable | Extract and run `HandyPlayer.exe` |
+| `publish/HandyPlayer-1.1.0-win-x64.msi` | Installer | Standard Windows MSI, installs to Program Files with Start Menu shortcut |
 
 The MSI installer requires [WiX Toolset v5](https://wixtoolset.org/). One-time setup:
 ```powershell
@@ -438,8 +438,8 @@ chmod +x publish-mac.sh
 **Outputs:**
 | File | Type | Description |
 |---|---|---|
-| `publish/HandyPlayer-1.0.0-mac-arm64.zip` | Portable | Extract and drag `.app` to `/Applications` |
-| `publish/HandyPlayer-1.0.0-mac-arm64.dmg` | Installer | Drag-to-Applications disk image |
+| `publish/HandyPlayer-1.1.0-mac-arm64.zip` | Portable | Extract and drag `.app` to `/Applications` |
+| `publish/HandyPlayer-1.1.0-mac-arm64.dmg` | Installer | Drag-to-Applications disk image |
 
 Note: macOS Gatekeeper will block unsigned apps on first launch. Users must right-click the app and select "Open".
 
@@ -453,9 +453,9 @@ chmod +x publish-linux.sh
 **Outputs:**
 | File | Type | Description |
 |---|---|---|
-| `publish/HandyPlayer-1.0.0-linux-x64.tar.gz` | Portable | Extract and run `./HandyPlayer`. Includes `install.sh` for desktop integration |
-| `publish/handyplayer-1.0.0-linux-x64.deb` | Installer | Debian/Ubuntu package, installs to `/opt/HandyPlayer` |
-| `publish/HandyPlayer-1.0.0-linux-x64.AppImage` | AppImage | Single-file executable (only if `appimagetool` is installed) |
+| `publish/HandyPlayer-1.1.0-linux-x64.tar.gz` | Portable | Extract and run `./HandyPlayer`. Includes `install.sh` for desktop integration |
+| `publish/handyplayer-1.1.0-linux-x64.deb` | Installer | Debian/Ubuntu package, installs to `/opt/HandyPlayer` |
+| `publish/HandyPlayer-1.1.0-linux-x64.AppImage` | AppImage | Single-file executable (only if `appimagetool` is installed) |
 
 The portable `install.sh` supports both user and system-wide install:
 ```bash
@@ -557,8 +557,8 @@ For detailed technical documentation, architecture diagrams, and design patterns
 
 | Component | Technology |
 |---|---|
-| Framework | .NET 10 |
-| UI | Avalonia 11.2 (cross-platform XAML) |
+| Framework | .NET 11 |
+| UI | Avalonia 12.1 (cross-platform XAML) |
 | MVVM | CommunityToolkit.Mvvm |
 | Video Player | libmpv (P/Invoke, ships as native DLL) |
 | Database | SQLite (Microsoft.Data.Sqlite) |

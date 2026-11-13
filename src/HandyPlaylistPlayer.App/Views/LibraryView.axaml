@@ -41,7 +41,7 @@
         <!-- Search + Add Folder -->
         <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
             <Grid Grid.Column="0" ColumnDefinitions="*,Auto" Margin="0,0,8,0">
-                <TextBox Grid.Column="0" Text="{Binding SearchText}" Watermark="Search library..." />
+                <TextBox Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="Search library..." />
                 <Button Grid.Column="1" Content="✕" Padding="6,0" Margin="4,0,0,0"
                         Command="{Binding ClearSearchCommand}"
                         IsVisible="{Binding SearchText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"

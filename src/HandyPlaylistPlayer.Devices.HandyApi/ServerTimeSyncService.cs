@@ -61,7 +61,7 @@ public class ServerTimeSyncService(ILogger<ServerTimeSyncService> logger)
                 // Read raw response first for diagnostics
                 using var rawResponse = await client.GetAsync("hstp/time", ct);
                 var rawBody = await rawResponse.Content.ReadAsStringAsync(ct);
-                var response = System.Text.Json.JsonSerializer.Deserialize<HandyServerTimeResponse>(rawBody);
+                var response = System.Text.Json.JsonSerializer.Deserialize(rawBody, HandyApiJsonContext.Default.HandyServerTimeResponse);
                 if (response == null) continue;
 
                 var receiveTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -90,25 +90,38 @@ public class ServerTimeSyncService(ILogger<ServerTimeSyncService> logger)
         }
 
         // Remove outliers (beyond 1.5x IQR)
-        var sorted = offsets.OrderBy(x => x).ToList();
-        int n = sorted.Count;
+        var sorted = offsets.ToArray();
+        Array.Sort(sorted);
+        int n = sorted.Length;
         var q1 = sorted[(n - 1) / 4];
         var q3 = sorted[(n - 1) * 3 / 4];
         var iqr = Math.Max(q3 - q1, 1); // Avoid zero IQR
         var lower = q1 - (long)(1.5 * iqr);
         var upper = q3 + (long)(1.5 * iqr);
 
-        var filtered = offsets.Where(o => o >= lower && o <= upper).ToList();
-        if (filtered.Count == 0)
-            filtered = offsets; // Fallback: use all if filtering removed everything
+        long sum = 0;
+        int filteredCount = 0;
+        foreach (var o in offsets)
+        {
+            if (o >= lower && o <= upper) { sum += o; filteredCount++; }
+        }
+        if (filteredCount == 0)
+        {
+            // Fallback: use all if filtering removed everything
+            sum = 0;
+            foreach (var o in offsets) sum += o;
+            filteredCount = offsets.Count;
+        }
 
-        Interlocked.Exchange(ref _offsetMs, (long)filtered.Average());
+        Interlocked.Exchange(ref _offsetMs, (long)((double)sum / filteredCount));
         _synced = true;
 
-        var avgRtd = rtds.Count > 0 ? (long)rtds.Average() : 0;
+        long rtdSum = 0;
+        foreach (var r in rtds) rtdSum += r;
+        var avgRtd = rtds.Count > 0 ? (long)((double)rtdSum / rtds.Count) : 0;
         Interlocked.Exchange(ref _avgRtdMs, avgRtd);
         logger.LogInformation(
             "Time sync complete. Offset: {Offset}ms, Avg RTD: {Rtd}ms, Samples: {Count}/{Total}",
-            Interlocked.Read(ref _offsetMs), avgRtd, filtered.Count, rounds);
+            Interlocked.Read(ref _offsetMs), avgRtd, filteredCount, rounds);
     }
 }

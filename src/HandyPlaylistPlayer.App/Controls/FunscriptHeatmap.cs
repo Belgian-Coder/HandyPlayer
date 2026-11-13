@@ -133,31 +133,36 @@ public class FunscriptHeatmap : Control
 
     private static readonly ImmutableSolidColorBrush LoopMarkerFill = new(Color.FromRgb(255, 200, 0));
 
-    private static void DrawLoopTriangle(DrawingContext context, double x, double height, bool isStart)
+    // Loop-boundary triangles are built once in local coordinates and positioned with a transform,
+    // so Render() allocates no geometry per frame. Index: [isStart ? 0 : 1].
+    private const double TriangleSize = 6;
+    private static readonly StreamGeometry[] TopTriangles = [CreateTriangle(1, 1), CreateTriangle(-1, 1)];
+    private static readonly StreamGeometry[] BottomTriangles = [CreateTriangle(1, -1), CreateTriangle(-1, -1)];
+
+    private static StreamGeometry CreateTriangle(int dirX, int dirY)
     {
-        // Small triangle at top pointing inward to mark loop boundary
-        const double sz = 6;
-        var dir = isStart ? 1 : -1;
         var geo = new StreamGeometry();
         using (var ctx = geo.Open())
         {
-            ctx.BeginFigure(new Point(x, 0), true);
-            ctx.LineTo(new Point(x + sz * dir, 0));
-            ctx.LineTo(new Point(x, sz));
+            ctx.BeginFigure(new Point(0, 0), true);
+            ctx.LineTo(new Point(TriangleSize * dirX, 0));
+            ctx.LineTo(new Point(0, TriangleSize * dirY));
             ctx.EndFigure(true);
         }
-        context.DrawGeometry(LoopMarkerFill, null, geo);
+        return geo;
+    }
+
+    private static void DrawLoopTriangle(DrawingContext context, double x, double height, bool isStart)
+    {
+        var idx = isStart ? 0 : 1;
+
+        // Top triangle pointing inward to mark loop boundary
+        using (context.PushTransform(Matrix.CreateTranslation(x, 0)))
+            context.DrawGeometry(LoopMarkerFill, null, TopTriangles[idx]);
 
         // Bottom triangle
-        var geo2 = new StreamGeometry();
-        using (var ctx = geo2.Open())
-        {
-            ctx.BeginFigure(new Point(x, height), true);
-            ctx.LineTo(new Point(x + sz * dir, height));
-            ctx.LineTo(new Point(x, height - sz));
-            ctx.EndFigure(true);
-        }
-        context.DrawGeometry(LoopMarkerFill, null, geo2);
+        using (context.PushTransform(Matrix.CreateTranslation(x, height)))
+            context.DrawGeometry(LoopMarkerFill, null, BottomTriangles[idx]);
     }
 
     private static byte[] ComputeIntensity(FunscriptDocument script, int width)

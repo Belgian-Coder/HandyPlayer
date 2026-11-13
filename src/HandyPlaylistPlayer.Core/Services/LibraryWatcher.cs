@@ -13,7 +13,7 @@ public class LibraryWatcher : IDisposable
     private readonly ILibraryIndexer _indexer;
     private readonly ILogger<LibraryWatcher> _logger;
     private readonly List<FileSystemWatcher> _watchers = [];
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private CancellationTokenSource? _debounceCts;
     private bool _disposed;
 

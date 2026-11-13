@@ -36,7 +36,7 @@
                         <TextBlock Text="Accent Color" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
                         <TextBlock Text="Applies to buttons, highlights, and selection. Theme defaults appear at the top."
                                    FontSize="{StaticResource FontSizeSmall}" Opacity="0.5" TextWrapping="Wrap" />
-                        <TextBox Text="{Binding AccentSearch}" Watermark="Search by name or hex…" />
+                        <TextBox Text="{Binding AccentSearch}" PlaceholderText="Search by name or hex…" />
                         <ListBox ItemsSource="{Binding FilteredAccentColors}"
                                  SelectedItem="{Binding SelectedAccentColor}"
                                  AutoScrollToSelectedItem="False"
@@ -69,7 +69,7 @@
 
                         <!-- Background -->
                         <TextBlock Text="Background" FontSize="{StaticResource FontSizeBody}" Margin="0,4,0,0" />
-                        <TextBox Text="{Binding BgSearch}" Watermark="Search by name or hex…" />
+                        <TextBox Text="{Binding BgSearch}" PlaceholderText="Search by name or hex…" />
                         <ListBox ItemsSource="{Binding FilteredBgColors}"
                                  SelectedItem="{Binding SelectedBgColor}"
                                  AutoScrollToSelectedItem="False"
@@ -91,7 +91,7 @@
 
                         <!-- Text Color -->
                         <TextBlock Text="Text Color" FontSize="{StaticResource FontSizeBody}" Margin="0,4,0,0" />
-                        <TextBox Text="{Binding TextSearch}" Watermark="Search by name or hex…" />
+                        <TextBox Text="{Binding TextSearch}" PlaceholderText="Search by name or hex…" />
                         <ListBox ItemsSource="{Binding FilteredTextColors}"
                                  SelectedItem="{Binding SelectedTextColor}"
                                  AutoScrollToSelectedItem="False"
@@ -113,7 +113,7 @@
 
                         <!-- Highlighted Text Color -->
                         <TextBlock Text="Highlighted Text Color" FontSize="{StaticResource FontSizeBody}" Margin="0,4,0,0" />
-                        <TextBox Text="{Binding HighlightSearch}" Watermark="Search by name or hex…" />
+                        <TextBox Text="{Binding HighlightSearch}" PlaceholderText="Search by name or hex…" />
                         <ListBox ItemsSource="{Binding FilteredHighlightColors}"
                                  SelectedItem="{Binding SelectedHighlightColor}"
                                  AutoScrollToSelectedItem="False"
@@ -135,7 +135,7 @@
 
                         <!-- Button Color -->
                         <TextBlock Text="Button Color" FontSize="{StaticResource FontSizeBody}" Margin="0,4,0,0" />
-                        <TextBox Text="{Binding ButtonSearch}" Watermark="Search by name or hex…" />
+                        <TextBox Text="{Binding ButtonSearch}" PlaceholderText="Search by name or hex…" />
                         <ListBox ItemsSource="{Binding FilteredButtonColors}"
                                  SelectedItem="{Binding SelectedButtonColor}"
                                  AutoScrollToSelectedItem="False"
@@ -185,7 +185,7 @@
                                 <TextBlock Text="Handy Connection Key" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBox Grid.Column="0" Text="{Binding ConnectionKey}"
-                                             Watermark="Enter your connection key" />
+                                             PlaceholderText="Enter your connection key" />
                                     <Button Grid.Column="1" Content="Save" Margin="8,0,0,0"
                                             Command="{Binding SaveConnectionKeyCommand}" />
                                 </Grid>
@@ -222,7 +222,7 @@
                                 <TextBlock Text="Intiface WebSocket URL" FontSize="{StaticResource FontSizeSubtitle}" FontWeight="SemiBold" />
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBox Grid.Column="0" Text="{Binding IntifaceUrl}"
-                                             Watermark="ws://localhost:12345" />
+                                             PlaceholderText="ws://localhost:12345" />
                                     <Button Grid.Column="1" Content="Save" Margin="8,0,0,0"
                                             Command="{Binding SaveIntifaceUrlCommand}" />
                                 </Grid>

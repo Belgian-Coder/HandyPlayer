@@ -37,7 +37,7 @@ All infrastructure projects depend **only on Core** (never on each other). The A
 
 ```
 HandyPlaylistPlayer.sln
-├── global.json                  # Pins .NET 10 SDK
+├── global.json                  # Pins .NET 11 SDK
 ├── Directory.Build.props        # Shared build settings (TFM, nullable, lang version)
 │
 ├── src/
@@ -70,7 +70,7 @@ HandyPlaylistPlayer.sln
 
 | Project | Purpose | Key NuGet Packages |
 |---|---|---|
-| **App** | UI shell, MVVM ViewModels, DI composition root | Avalonia 11.2, CommunityToolkit.Mvvm, Serilog |
+| **App** | UI shell, MVVM ViewModels, DI composition root | Avalonia 12.1, CommunityToolkit.Mvvm, Serilog |
 | **Core** | Feature slices, dispatching, runtime services, models | System.IO.Abstractions, M.E.DI.Abstractions |
 | **Media.Mpv** | Embedded video player via libmpv | (no NuGet — P/Invoke directly to `libmpv-2.dll`) |
 | **Devices.HandyApi** | Handy device control via HSSP/HDSP protocols | System.Net.Http.Json |
@@ -663,7 +663,7 @@ Fullscreen hides the sidebar and bottom action bar, leaving only the video and a
 
 ### Prerequisites
 
-- .NET 10 SDK (pinned via `global.json`)
+- .NET 11 SDK (pinned via `global.json`)
 - libmpv native library per platform (see below). The build copies it to the output directory from `runtimes/<rid>/native/`. Native binaries are not checked into git due to size — download them separately (see Development Setup in README.md).
 
 ### Build

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <PackageReference Include="Buttplug" Version="5.0.0" />
+    <PackageReference Include="Buttplug" Version="5.0.1" />
   </ItemGroup>
 
   <ItemGroup>

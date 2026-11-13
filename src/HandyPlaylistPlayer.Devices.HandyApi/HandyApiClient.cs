@@ -87,7 +87,7 @@ public class HandyApiClient : IDeviceBackend
                             StartTime = lastKnown,
                             Loop = false,
                             PlaybackRate = rate
-                        }), default);
+                        }, HandyApiJson.Options), default);
             }
             catch (Exception ex)
             {
@@ -129,7 +129,7 @@ public class HandyApiClient : IDeviceBackend
         try
         {
             var result = await RetryAsync(async () =>
-                await _httpClient.GetFromJsonAsync<HandyConnectedResponse>("connected", ct), ct);
+                await _httpClient.GetFromJsonAsync<HandyConnectedResponse>("connected", HandyApiJson.Options, ct), ct);
 
             if (result?.Connected != true)
             {
@@ -145,7 +145,7 @@ public class HandyApiClient : IDeviceBackend
             // Set device mode and slide range in parallel
             var mode = _protocol == HandyProtocol.HDSP ? HandyDeviceModes.HDSP : HandyDeviceModes.HSSP;
             var modeTask = RetryAsync(async () =>
-                await _httpClient.PutAsJsonAsync("mode", new HandyModeRequest { Mode = mode }, ct), ct);
+                await _httpClient.PutAsJsonAsync("mode", new HandyModeRequest { Mode = mode }, HandyApiJson.Options, ct), ct);
             // Reset slide range to full 0-100 so our position values map correctly.
             // Other apps may have narrowed the range; without this reset, HDSP positions
             // get physically remapped into a tiny band (e.g. 80-100), making it look like
@@ -217,13 +217,13 @@ public class HandyApiClient : IDeviceBackend
 
             // Set mode to HSSP
             await RetryAsync(async () =>
-                await _httpClient.PutAsJsonAsync("mode", new HandyModeRequest { Mode = HandyDeviceModes.HSSP }, ct), ct);
+                await _httpClient.PutAsJsonAsync("mode", new HandyModeRequest { Mode = HandyDeviceModes.HSSP }, HandyApiJson.Options, ct), ct);
             _logger.LogInformation("HSSP: device mode set to {Mode}", HandyDeviceModes.HSSP);
 
             // Setup HSSP
             await RetryAsync(async () =>
                 await _httpClient.PutAsJsonAsync("hssp/setup",
-                    new HandyHsspSetupRequest { Url = url, Sha256 = sha256 }, ct), ct);
+                    new HandyHsspSetupRequest { Url = url, Sha256 = sha256 }, HandyApiJson.Options, ct), ct);
 
             _logger.LogInformation("HSSP script setup complete: url={Url}", url);
         }
@@ -294,7 +294,7 @@ public class HandyApiClient : IDeviceBackend
                     StartTime = startTimeMs,
                     Loop = false,
                     PlaybackRate = _playbackRate
-                }, ct), ct);
+                }, HandyApiJson.Options, ct), ct);
 
         _hsspPlaying = true;
         Interlocked.Exchange(ref _hsspLastKnownTimeMs, startTimeMs);
@@ -403,7 +403,7 @@ public class HandyApiClient : IDeviceBackend
                         StartTime = mediaTimeMs,
                         Loop = false,
                         PlaybackRate = 1.0
-                    }, ct)) { }
+                    }, HandyApiJson.Options, ct)) { }
                 _hsspPlaying = true;
                 _logger.LogInformation("HSSP hard resync completed at {Time}ms", mediaTimeMs);
             }
@@ -427,7 +427,7 @@ public class HandyApiClient : IDeviceBackend
                         CurrentTime = mediaTimeMs,
                         ServerTime = serverTime,
                         Filter = 1.0
-                    }, ct)) { }
+                    }, HandyApiJson.Options, ct)) { }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -481,7 +481,7 @@ public class HandyApiClient : IDeviceBackend
                 position, durationMs);
 
             // Switch to HDSP mode and send position
-            using (await _httpClient.PutAsJsonAsync("mode", new HandyModeRequest { Mode = HandyDeviceModes.HDSP }, ct)) { }
+            using (await _httpClient.PutAsJsonAsync("mode", new HandyModeRequest { Mode = HandyDeviceModes.HDSP }, HandyApiJson.Options, ct)) { }
 
             var json = string.Create(CultureInfo.InvariantCulture,
                 $"{{ \"immediateResponse\": true, \"stopOnTarget\": true, \"duration\": {duration}, \"position\": {pos:F4} }}");
@@ -506,14 +506,14 @@ public class HandyApiClient : IDeviceBackend
             // Use CancellationToken.None — the caller's CT may already be cancelled (pause lifecycle)
             // and this restore MUST complete, otherwise the device stays in HDSP and play commands fail.
             if (_httpClient == null) return;
-            using (await _httpClient.PutAsJsonAsync("mode", new HandyModeRequest { Mode = HandyDeviceModes.HSSP }, CancellationToken.None)) { }
+            using (await _httpClient.PutAsJsonAsync("mode", new HandyModeRequest { Mode = HandyDeviceModes.HSSP }, HandyApiJson.Options, CancellationToken.None)) { }
             _logger.LogInformation("HSSP SendPosition: restored HSSP mode");
 
             // Re-send hssp/setup with cached script — mode switch may clear the association
             if (_lastHsspUrl != null && _lastHsspSha256 != null)
             {
                 using (await _httpClient.PutAsJsonAsync("hssp/setup",
-                    new HandyHsspSetupRequest { Url = _lastHsspUrl, Sha256 = _lastHsspSha256 }, CancellationToken.None)) { }
+                    new HandyHsspSetupRequest { Url = _lastHsspUrl, Sha256 = _lastHsspSha256 }, HandyApiJson.Options, CancellationToken.None)) { }
                 _logger.LogInformation("HSSP SendPosition: re-sent hssp/setup after mode restore");
             }
         }
@@ -603,7 +603,7 @@ public class HandyApiClient : IDeviceBackend
 
         try
         {
-            DeviceInfo = await _httpClient.GetFromJsonAsync<HandyInfoResponse>("info", ct);
+            DeviceInfo = await _httpClient.GetFromJsonAsync<HandyInfoResponse>("info", HandyApiJson.Options, ct);
             _logger.LogInformation("Device: {Model} FW {FwVersion} HW {HwVersion}",
                 DeviceInfo?.Model, DeviceInfo?.FwVersion, DeviceInfo?.HwVersion);
         }
@@ -611,7 +611,7 @@ public class HandyApiClient : IDeviceBackend
 
         try
         {
-            DeviceStatus = await _httpClient.GetFromJsonAsync<HandyStatusResponse>("status", ct);
+            DeviceStatus = await _httpClient.GetFromJsonAsync<HandyStatusResponse>("status", HandyApiJson.Options, ct);
             _logger.LogInformation("Device status: mode={Mode} state={State}",
                 DeviceStatus?.Mode, DeviceStatus?.State);
         }
@@ -619,7 +619,7 @@ public class HandyApiClient : IDeviceBackend
 
         try
         {
-            DeviceSlide = await _httpClient.GetFromJsonAsync<HandySlideResponse>("slide", ct);
+            DeviceSlide = await _httpClient.GetFromJsonAsync<HandySlideResponse>("slide", HandyApiJson.Options, ct);
             _logger.LogInformation("Device slide range: {Min}-{Max}",
                 DeviceSlide?.Min, DeviceSlide?.Max);
         }
@@ -632,7 +632,7 @@ public class HandyApiClient : IDeviceBackend
 
         await RetryAsync(async () =>
             await _httpClient.PutAsJsonAsync("slide",
-                new HandySlideRequest { Min = min, Max = max }, ct), ct);
+                new HandySlideRequest { Min = min, Max = max }, HandyApiJson.Options, ct), ct);
 
         DeviceSlide = new HandySlideResponse { Min = min, Max = max };
         _logger.LogInformation("Slide range set to {Min}-{Max}", min, max);
@@ -658,7 +658,7 @@ public class HandyApiClient : IDeviceBackend
 
                 if (_httpClient == null || string.IsNullOrEmpty(_connectionKey)) break;
 
-                var result = await _httpClient.GetFromJsonAsync<HandyConnectedResponse>("connected");
+                var result = await _httpClient.GetFromJsonAsync<HandyConnectedResponse>("connected", HandyApiJson.Options);
                 if (result?.Connected == true)
                 {
                     // Re-sync time (fewer rounds for reconnect) and restore mode + slide in parallel
@@ -666,7 +666,7 @@ public class HandyApiClient : IDeviceBackend
                     var mode = _protocol == HandyProtocol.HDSP ? HandyDeviceModes.HDSP : HandyDeviceModes.HSSP;
                     var modeTask2 = Task.Run(async () =>
                     {
-                        using var r = await _httpClient.PutAsJsonAsync("mode", new HandyModeRequest { Mode = mode });
+                        using var r = await _httpClient.PutAsJsonAsync("mode", new HandyModeRequest { Mode = mode }, HandyApiJson.Options);
                     });
                     var slideTask2 = SetSlideRangeAsync(0, 100);
                     await Task.WhenAll(modeTask2, slideTask2);

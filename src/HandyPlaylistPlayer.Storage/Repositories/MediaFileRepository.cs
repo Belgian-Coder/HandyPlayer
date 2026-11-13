@@ -319,11 +319,11 @@ public class MediaFileRepository(DatabaseConfig config) : HandyPlaylistPlayer.Co
         Filename = reader.GetString(ord.Filename),
         Extension = reader.GetString(ord.Extension),
         FileSize = reader.IsDBNull(ord.FileSize) ? null : reader.GetInt64(ord.FileSize),
-        ModifiedAt = reader.IsDBNull(ord.ModifiedAt) ? null : DateTime.Parse(reader.GetString(ord.ModifiedAt), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+        ModifiedAt = reader.IsDBNull(ord.ModifiedAt) ? null : SqliteDateParser.Parse(reader.GetString(ord.ModifiedAt)),
         DurationMs = reader.IsDBNull(ord.DurationMs) ? null : reader.GetInt64(ord.DurationMs),
         IsScript = reader.GetInt32(ord.IsScript) != 0,
-        CreatedAt = DateTime.Parse(reader.GetString(ord.CreatedAt), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
-        WatchedAt = reader.IsDBNull(ord.WatchedAt) ? null : DateTime.Parse(reader.GetString(ord.WatchedAt), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+        CreatedAt = SqliteDateParser.Parse(reader.GetString(ord.CreatedAt)),
+        WatchedAt = reader.IsDBNull(ord.WatchedAt) ? null : SqliteDateParser.Parse(reader.GetString(ord.WatchedAt)),
         LastPositionMs = reader.IsDBNull(ord.LastPositionMs) ? null : reader.GetInt64(ord.LastPositionMs),
         FileHash = reader.IsDBNull(ord.FileHash) ? null : reader.GetString(ord.FileHash)
     };

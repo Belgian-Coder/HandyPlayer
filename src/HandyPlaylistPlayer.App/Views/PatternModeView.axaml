@@ -65,7 +65,7 @@
             <!-- Seed (optional) -->
             <StackPanel Spacing="4">
                 <TextBlock Text="Seed (optional — for reproducible random patterns)" FontSize="{StaticResource FontSizeBody}" />
-                <TextBox Text="{Binding SeedText}" Watermark="Leave empty for random"
+                <TextBox Text="{Binding SeedText}" PlaceholderText="Leave empty for random"
                          Width="200" HorizontalAlignment="Left" />
             </StackPanel>
 

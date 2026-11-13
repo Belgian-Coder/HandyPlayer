@@ -1,136 +1,104 @@
 using System.Collections.Concurrent;
-using System.Linq.Expressions;
 
 namespace HandyPlaylistPlayer.Core.Dispatching;
 
+/// <summary>
+/// Routes commands/queries to their handlers. Per message type a strongly typed pipeline is created once
+/// (cached per <c>TResult</c>), so a dispatch is: dictionary lookup → DI resolve → validate → <c>handler.HandleAsync</c>.
+/// No expression-tree delegates, no object boxing of results, and no extra async state machine around the handler call.
+/// Failures (missing handler, validation, synchronous handler exceptions) are still delivered through the returned task.
+/// </summary>
 public class Dispatcher(IServiceProvider services) : IDispatcher
 {
-    // Cache: commandType -> (handlerServiceType, validatorServiceType, compiled handle delegate, compiled validate delegate)
-    private static readonly ConcurrentDictionary<(Type messageType, Type resultType), CachedCommandPipeline> CommandCache = new();
-    private static readonly ConcurrentDictionary<(Type queryType, Type resultType), CachedQueryPipeline> QueryCache = new();
-
-    public async Task<TResult> SendAsync<TResult>(ICommand<TResult> command, CancellationToken ct = default)
+    public Task<TResult> SendAsync<TResult>(ICommand<TResult> command, CancellationToken ct = default)
     {
-        var commandType = command.GetType();
-        var key = (commandType, typeof(TResult));
-
-        var pipeline = CommandCache.GetOrAdd(key, static k =>
+        try
         {
-            var handlerServiceType = typeof(ICommandHandler<,>).MakeGenericType(k.messageType, k.resultType);
-            var validatorServiceType = typeof(IValidator<>).MakeGenericType(k.messageType);
-
-            // Build compiled delegate for HandleAsync(command, ct) -> Task<TResult>
-            var handleDelegate = BuildHandleDelegate(handlerServiceType, k.messageType, k.resultType);
-
-            // Build compiled delegate for Validate(command) -> ValidationResult
-            var validateDelegate = BuildValidateDelegate(validatorServiceType, k.messageType);
-
-            return new CachedCommandPipeline(handlerServiceType, validatorServiceType, handleDelegate, validateDelegate);
-        });
-
-        var handler = services.GetService(pipeline.HandlerServiceType)
-            ?? throw new InvalidOperationException($"No handler registered for {commandType.Name}");
-
-        // Run validator if registered
-        var validator = services.GetService(pipeline.ValidatorServiceType);
-        if (validator != null)
-        {
-            var result = pipeline.Validate(validator, command);
-            if (!result.IsValid)
-                throw new ValidationException(result);
+            var pipeline = CommandPipelines<TResult>.Cache.GetOrAdd(command.GetType(), CommandPipelines<TResult>.Create);
+            return pipeline.SendAsync(services, command, ct);
         }
-
-        return await pipeline.Handle<TResult>(handler, command, ct);
-    }
-
-    public async Task<TResult> QueryAsync<TResult>(IQuery<TResult> query, CancellationToken ct = default)
-    {
-        var queryType = query.GetType();
-        var key = (queryType, typeof(TResult));
-
-        var pipeline = QueryCache.GetOrAdd(key, static k =>
+        catch (Exception ex)
         {
-            var handlerServiceType = typeof(IQueryHandler<,>).MakeGenericType(k.queryType, k.resultType);
-            var handleDelegate = BuildHandleDelegate(handlerServiceType, k.queryType, k.resultType);
-            return new CachedQueryPipeline(handlerServiceType, handleDelegate);
-        });
-
-        var handler = services.GetService(pipeline.HandlerServiceType)
-            ?? throw new InvalidOperationException($"No handler registered for {queryType.Name}");
-
-        return await pipeline.Handle<TResult>(handler, query, ct);
+            return Task.FromException<TResult>(ex);
+        }
     }
 
-    // Builds: (object handler, object command, CancellationToken ct) => (Task<object>)handler.HandleAsync((TCommand)command, ct)
-    private static Func<object, object, CancellationToken, Task<object>> BuildHandleDelegate(
-        Type handlerType, Type messageType, Type resultType)
+    public Task<TResult> QueryAsync<TResult>(IQuery<TResult> query, CancellationToken ct = default)
     {
-        var handlerParam = Expression.Parameter(typeof(object), "handler");
-        var messageParam = Expression.Parameter(typeof(object), "message");
-        var ctParam = Expression.Parameter(typeof(CancellationToken), "ct");
-
-        var handleMethod = handlerType.GetMethod("HandleAsync")!;
-
-        // ((IHandler)handler).HandleAsync((TMessage)message, ct)
-        var call = Expression.Call(
-            Expression.Convert(handlerParam, handlerType),
-            handleMethod,
-            Expression.Convert(messageParam, messageType),
-            ctParam);
-
-        // We need to convert Task<TResult> to Task<object>
-        // Use a continuation: task.ContinueWith(t => (object)t.Result)
-        var taskResultType = typeof(Task<>).MakeGenericType(resultType);
-        var continuationMethod = typeof(Dispatcher).GetMethod(nameof(CastTaskResult),
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .MakeGenericMethod(resultType);
-
-        var castCall = Expression.Call(continuationMethod, call);
-
-        return Expression.Lambda<Func<object, object, CancellationToken, Task<object>>>(
-            castCall, handlerParam, messageParam, ctParam).Compile();
+        try
+        {
+            var pipeline = QueryPipelines<TResult>.Cache.GetOrAdd(query.GetType(), QueryPipelines<TResult>.Create);
+            return pipeline.QueryAsync(services, query, ct);
+        }
+        catch (Exception ex)
+        {
+            return Task.FromException<TResult>(ex);
+        }
     }
 
-    private static async Task<object> CastTaskResult<T>(Task<T> task)
+    // ---- commands ----
+
+    private abstract class CommandPipeline<TResult>
     {
-        return (await task)!;
+        public abstract Task<TResult> SendAsync(IServiceProvider services, ICommand<TResult> command, CancellationToken ct);
     }
 
-    // Builds: (object validator, object command) => ((IValidator<TCommand>)validator).Validate((TCommand)command)
-    private static Func<object, object, ValidationResult> BuildValidateDelegate(Type validatorType, Type messageType)
+    private sealed class CommandPipeline<TCommand, TResult> : CommandPipeline<TResult>
+        where TCommand : ICommand<TResult>
     {
-        var validatorParam = Expression.Parameter(typeof(object), "validator");
-        var messageParam = Expression.Parameter(typeof(object), "message");
+        public override Task<TResult> SendAsync(IServiceProvider services, ICommand<TResult> command, CancellationToken ct)
+        {
+            var handler = (ICommandHandler<TCommand, TResult>?)services.GetService(typeof(ICommandHandler<TCommand, TResult>))
+                ?? throw new InvalidOperationException($"No handler registered for {command.GetType().Name}");
 
-        var validateMethod = validatorType.GetMethod("Validate")!;
+            var typed = (TCommand)command;
 
-        var call = Expression.Call(
-            Expression.Convert(validatorParam, validatorType),
-            validateMethod,
-            Expression.Convert(messageParam, messageType));
+            // Run validator if registered
+            if (services.GetService(typeof(IValidator<TCommand>)) is IValidator<TCommand> validator)
+            {
+                var result = validator.Validate(typed);
+                if (!result.IsValid)
+                    throw new ValidationException(result);
+            }
 
-        return Expression.Lambda<Func<object, object, ValidationResult>>(
-            call, validatorParam, messageParam).Compile();
+            return handler.HandleAsync(typed, ct);
+        }
     }
 
-    private sealed record CachedCommandPipeline(
-        Type HandlerServiceType,
-        Type ValidatorServiceType,
-        Func<object, object, CancellationToken, Task<object>> HandleFunc,
-        Func<object, object, ValidationResult> ValidateFunc)
+    private static class CommandPipelines<TResult>
     {
-        public async Task<TResult> Handle<TResult>(object handler, object command, CancellationToken ct)
-            => (TResult)(await HandleFunc(handler, command, ct));
+        public static readonly ConcurrentDictionary<Type, CommandPipeline<TResult>> Cache = new();
 
-        public ValidationResult Validate(object validator, object command)
-            => ValidateFunc(validator, command);
+        public static CommandPipeline<TResult> Create(Type commandType)
+            => (CommandPipeline<TResult>)Activator.CreateInstance(
+                typeof(CommandPipeline<,>).MakeGenericType(commandType, typeof(TResult)))!;
     }
 
-    private sealed record CachedQueryPipeline(
-        Type HandlerServiceType,
-        Func<object, object, CancellationToken, Task<object>> HandleFunc)
+    // ---- queries ----
+
+    private abstract class QueryPipeline<TResult>
     {
-        public async Task<TResult> Handle<TResult>(object handler, object query, CancellationToken ct)
-            => (TResult)(await HandleFunc(handler, query, ct));
+        public abstract Task<TResult> QueryAsync(IServiceProvider services, IQuery<TResult> query, CancellationToken ct);
+    }
+
+    private sealed class QueryPipeline<TQuery, TResult> : QueryPipeline<TResult>
+        where TQuery : IQuery<TResult>
+    {
+        public override Task<TResult> QueryAsync(IServiceProvider services, IQuery<TResult> query, CancellationToken ct)
+        {
+            var handler = (IQueryHandler<TQuery, TResult>?)services.GetService(typeof(IQueryHandler<TQuery, TResult>))
+                ?? throw new InvalidOperationException($"No handler registered for {query.GetType().Name}");
+
+            return handler.HandleAsync((TQuery)query, ct);
+        }
+    }
+
+    private static class QueryPipelines<TResult>
+    {
+        public static readonly ConcurrentDictionary<Type, QueryPipeline<TResult>> Cache = new();
+
+        public static QueryPipeline<TResult> Create(Type queryType)
+            => (QueryPipeline<TResult>)Activator.CreateInstance(
+                typeof(QueryPipeline<,>).MakeGenericType(queryType, typeof(TResult)))!;
     }
 }

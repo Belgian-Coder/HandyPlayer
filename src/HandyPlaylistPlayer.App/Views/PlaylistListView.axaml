@@ -13,7 +13,7 @@
             <!-- Create new -->
             <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,4">
                 <TextBox Grid.Column="0" Text="{Binding NewPlaylistName}"
-                         Watermark="New playlist..." />
+                         PlaceholderText="New playlist..." />
                 <Button Grid.Column="1" Content="+" Margin="4,0,0,0"
                         Command="{Binding CreatePlaylistCommand}"
                         ToolTip.Tip="Create static playlist" />
@@ -85,7 +85,7 @@
             <!-- Search + bulk actions toolbar -->
             <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,4">
                 <TextBox Grid.Column="0" Text="{Binding PlaylistItemFilter}"
-                         Watermark="Search items…" />
+                         PlaceholderText="Search items…" />
                 <Button Grid.Column="1" Content="Select All"
                         FontSize="{StaticResource FontSizeSmall}" Padding="8,4" Margin="4,0,0,0"
                         MinWidth="0" MinHeight="0"
