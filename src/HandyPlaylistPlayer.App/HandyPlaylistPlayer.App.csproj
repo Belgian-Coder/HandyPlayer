@@ -12,6 +12,10 @@
   <!-- Publishing settings for self-contained packages -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' And '$(RuntimeIdentifier)' != ''">
     <SelfContained>true</SelfContained>
+    <!-- Composite ReadyToRun (framework + app precompiled together): measured startup CPU to first window
+         1.8 s vs 4.0 s JIT-only on .NET 11 (4.6 s on the old .NET 10 build), for ~+55 MB on disk. -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishReadyToRunComposite>true</PublishReadyToRunComposite>
   </PropertyGroup>
 
   <ItemGroup>
