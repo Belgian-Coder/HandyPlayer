@@ -1,8 +1,12 @@
 # HandyPlayer development
 
-`AGENTS.md` is canonical for Codex desktop. Root `CLAUDE.md` imports it for
-Claude Code. Open either agent from the repository root; preserve any selected
-model/reasoning settings and global configuration.
+`AGENTS.md` is the sole project instruction file for Codex desktop and Claude
+Code. Claude Code 2.1.277 or newer loads it natively when no `CLAUDE.md` or
+`CLAUDE.local.md` exists in the project or its ancestor directories. A user-level
+`~/.claude/CLAUDE.md` does not block this fallback. Do not create project Claude
+instruction files or hooks that print these instructions. Open either agent from
+the repository root; preserve selected model/reasoning settings and global
+configuration.
 
 This is a native Avalonia desktop app, not a browser app. Read `TECHNICAL.md`
 for project boundaries and `README.md` for native prerequisites and packaging.
