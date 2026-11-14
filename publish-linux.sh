@@ -16,13 +16,13 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 RID="linux-x64"
-PORTABLE_DIR="publish/$APP_NAME-$VERSION-linux-x64"
-PUBLISH_DIR="publish/$RID-build"
+handy_release_begin "$RID"
+PORTABLE_DIR="$RELEASE_ROOT/$APP_NAME-$VERSION-linux-x64"
+PUBLISH_DIR="$RELEASE_ROOT/$RID-build"
 
 echo "Building $APP_NAME v$VERSION for Linux x64..."
 
-# Clean previous output
-rm -rf "$PUBLISH_DIR" "$PORTABLE_DIR"
+# This run owns its fresh output directory; previous releases remain intact.
 
 # Publish self-contained
 RESTORE_ARGS=()
@@ -109,21 +109,19 @@ echo "Build complete!"
 echo "  Portable: $PORTABLE_DIR/"
 
 # Create tar.gz for distribution (portable)
-TAR_PATH="publish/$APP_NAME-$VERSION-linux-x64.tar.gz"
-rm -f "$TAR_PATH"
+TAR_PATH="$RELEASE_ROOT/$APP_NAME-$VERSION-linux-x64.tar.gz"
 
 echo ""
 echo "Creating portable archive: $TAR_PATH"
-tar -czf "$TAR_PATH" -C publish "$(basename "$PORTABLE_DIR")"
+tar -czf "$TAR_PATH" -C "$RELEASE_ROOT" "$(basename "$PORTABLE_DIR")"
 
 TAR_SIZE=$(du -sh "$TAR_PATH" | cut -f1)
 echo "  Archive: $TAR_PATH ($TAR_SIZE)"
 
 # --- .deb package ---
 DEB_NAME="${APP_NAME,,}-${VERSION}-linux-x64"
-DEB_ROOT="publish/$DEB_NAME"
-DEB_PATH="publish/$DEB_NAME.deb"
-rm -rf "$DEB_ROOT" "$DEB_PATH"
+DEB_ROOT="$RELEASE_ROOT/$DEB_NAME"
+DEB_PATH="$RELEASE_ROOT/$DEB_NAME.deb"
 
 echo ""
 echo "Creating .deb package: $DEB_PATH"
@@ -193,15 +191,13 @@ DEB_SIZE=$(du -sh "$DEB_PATH" | cut -f1)
 echo "  Package: $DEB_PATH ($DEB_SIZE)"
 
 # --- AppImage (optional, requires appimagetool) ---
-APPIMAGE_PATH="publish/$APP_NAME-$VERSION-linux-x64.AppImage"
-rm -f "$APPIMAGE_PATH"
+APPIMAGE_PATH="$RELEASE_ROOT/$APP_NAME-$VERSION-linux-x64.AppImage"
 
 if command -v appimagetool &> /dev/null; then
     echo ""
     echo "Creating AppImage: $APPIMAGE_PATH"
 
-    APPDIR="publish/$APP_NAME.AppDir"
-    rm -rf "$APPDIR"
+    APPDIR="$RELEASE_ROOT/$APP_NAME.AppDir"
     mkdir -p "$APPDIR/usr/bin"
     mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 

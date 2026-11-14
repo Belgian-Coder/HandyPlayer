@@ -17,3 +17,19 @@ foreach ($directory in @($env:NUGET_PACKAGES, $env:DOTNET_CLI_HOME,
     $env:NUGET_HTTP_CACHE_PATH, $env:NUGET_PLUGINS_CACHE_PATH, $env:TEMP)) {
     [IO.Directory]::CreateDirectory($directory) | Out-Null
 }
+
+function New-HandyReleaseRoot([ValidateSet('win-x64', 'linux-x64', 'osx-arm64')][string]$Rid) {
+    # Reject redirected ancestors before making a unique, task-owned output root.
+    $parent = $PSScriptRoot
+    foreach ($part in @('publish', 'releases', $Rid)) {
+        $parent = Join-Path $parent $part
+        if ((Test-Path -LiteralPath $parent) -and
+            ((Get-Item -LiteralPath $parent -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "Release output must not use a link/junction: $parent"
+        }
+        [IO.Directory]::CreateDirectory($parent) | Out-Null
+    }
+    $output = Join-Path $parent ([Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $output -ErrorAction Stop | Out-Null
+    return $output
+}

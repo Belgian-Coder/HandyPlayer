@@ -426,7 +426,12 @@ compilation. After restoring that exact self-contained RID/configuration, use
 `pwsh ./publish-win.ps1 -NoRestore` or `HANDY_NO_RESTORE=1 ./publish-linux.sh`
 (also supported by `publish-mac.sh`) to avoid a redundant restore. Packaging
 still regenerates outputs and retains native-media, installer and signing checks.
-Run release scripts only when output replacement is intended.
+Each release writes a fresh `publish/releases/<rid>/<run>/` directory and prints
+the exact artifact paths. Select assets from that run only; previous releases,
+failed-run evidence and warm caches remain intact. Scripts perform an exit cleanup
+checkpoint and remove only staging created by the current successful run. Follow
+the cleanup checkpoint in `AGENTS.md` after every commit/release; inspect ignored
+contents before removing a clean, pushed in-project worktree.
 
 - **Unit tests** (`tests/HandyPlaylistPlayer.Tests`): core logic, plus storage tests against a real SQLite database in a temp file and offline Handy wire-protocol tests.
 - **UI tests** (`tests/HandyPlaylistPlayer.UiTests`): the real app (XAML, view models, database) on Avalonia's headless platform, driven through real controls; only mpv, the device and thumbnails are faked. No display, libmpv or device needed. Screenshots of each step (and of any failure) land in `tests/HandyPlaylistPlayer.UiTests/bin/Release/net11.0/ui-artifacts/`.
@@ -453,15 +458,15 @@ Each platform has a publish script that produces a portable archive and an insta
 **Outputs:**
 | File | Type | Description |
 |---|---|---|
-| `publish/HandyPlayer-1.1.0-win-x64.zip` | Portable | Extract and run `HandyPlayer.exe` |
-| `publish/HandyPlayer-1.1.0-win-x64.msi` | Installer | Standard Windows MSI, installs to Program Files with Start Menu shortcut |
+| `publish/releases/win-x64/<run>/HandyPlayer-<version>-win-x64.zip` | Portable | Extract and run `HandyPlayer.exe` |
+| `publish/releases/win-x64/<run>/HandyPlayer-<version>-win-x64.msi` | Installer | Standard Windows MSI, installs to Program Files with Start Menu shortcut |
 
 The MSI installer requires [WiX Toolset 6.0.2](https://wixtoolset.org/). One-time setup (the script adds the matching UI extension itself):
 ```powershell
 dotnet tool install --global wix --version 6.0.2
 ```
 
-If WiX is not installed, the script still produces the portable zip and skips the MSI; pass `-RequireMsi` to make that an error. A failed MSI build fails the script. The publish also fails if `libmpv-2.dll` is missing, instead of shipping a player that cannot play video. `publish/SHA256SUMS-win-x64.txt` lists checksums for the zip and MSI.
+If WiX is not installed, the script still produces the portable zip and skips the MSI; pass `-RequireMsi` to make that an error. A failed MSI build fails the script. The publish also fails if `libmpv-2.dll` is missing, instead of shipping a player that cannot play video. `SHA256SUMS-win-x64.txt` in the selected run lists checksums for its shipped artifacts.
 
 ### macOS ARM64
 
@@ -473,8 +478,8 @@ chmod +x publish-mac.sh
 **Outputs:**
 | File | Type | Description |
 |---|---|---|
-| `publish/HandyPlayer-1.1.0-mac-arm64.zip` | Portable | Extract and drag `.app` to `/Applications` |
-| `publish/HandyPlayer-1.1.0-mac-arm64.dmg` | Installer | Drag-to-Applications disk image |
+| `publish/releases/osx-arm64/<run>/HandyPlayer-<version>-mac-arm64.zip` | Portable | Extract and drag `.app` to `/Applications` |
+| `publish/releases/osx-arm64/<run>/HandyPlayer-<version>-mac-arm64.dmg` | Installer | Drag-to-Applications disk image |
 
 Note: macOS Gatekeeper will block unsigned apps on first launch. Users must right-click the app and select "Open".
 
@@ -488,9 +493,9 @@ chmod +x publish-linux.sh
 **Outputs:**
 | File | Type | Description |
 |---|---|---|
-| `publish/HandyPlayer-1.1.0-linux-x64.tar.gz` | Portable | Extract and run `./HandyPlayer`. Includes `install.sh` for desktop integration |
-| `publish/handyplayer-1.1.0-linux-x64.deb` | Installer | Debian/Ubuntu package, installs to `/opt/HandyPlayer` |
-| `publish/HandyPlayer-1.1.0-linux-x64.AppImage` | AppImage | Single-file executable (only if `appimagetool` is installed) |
+| `publish/releases/linux-x64/<run>/HandyPlayer-<version>-linux-x64.tar.gz` | Portable | Extract and run `./HandyPlayer`. Includes `install.sh` for desktop integration |
+| `publish/releases/linux-x64/<run>/handyplayer-<version>-linux-x64.deb` | Installer | Debian/Ubuntu package, installs to `/opt/HandyPlayer` |
+| `publish/releases/linux-x64/<run>/HandyPlayer-<version>-linux-x64.AppImage` | AppImage | Single-file executable (only if `appimagetool` is installed) |
 
 The portable `install.sh` supports both user and system-wide install:
 ```bash

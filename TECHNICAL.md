@@ -724,7 +724,7 @@ The `NativeLibrary.SetDllImportResolver` in `MpvInterop` tries platform-specific
 ./publish-win.ps1
 ```
 
-**Outputs:** `publish/HandyPlayer-<version>-win-x64.zip` (portable), `.msi` installer (requires [WiX Toolset 6.0.2](https://wixtoolset.org/); `-RequireMsi` makes a missing WiX an error) and `publish/SHA256SUMS-win-x64.txt`. Publishing fails if `libmpv-2.dll` is missing.
+**Outputs:** a fresh `publish/releases/win-x64/<run>/` directory containing `HandyPlayer-<version>-win-x64.zip` (portable), `.msi` installer (requires [WiX Toolset 6.0.2](https://wixtoolset.org/); `-RequireMsi` makes a missing WiX an error) and `SHA256SUMS-win-x64.txt`. Publishing fails if `libmpv-2.dll` is missing. Previous runs remain intact; select only the exact paths printed by the current run.
 
 ### macOS ARM64 (Apple Silicon)
 
@@ -748,7 +748,7 @@ chmod +x publish-mac.sh
 ./publish-mac.sh
 ```
 
-**Outputs:** `publish/HandyPlayer-<version>-mac-arm64.zip` (portable) and `.dmg` installer.
+**Outputs:** `publish/releases/osx-arm64/<run>/HandyPlayer-<version>-mac-arm64.zip` (portable) and `.dmg` installer. Each run uses a fresh directory and retains previous output.
 
 **What the script does:**
 1. `dotnet publish` as self-contained for `osx-arm64`
@@ -796,7 +796,7 @@ chmod +x publish-linux.sh
 ./publish-linux.sh
 ```
 
-**Outputs:** `publish/HandyPlayer-<version>-linux-x64.tar.gz` (portable), `.deb` package (declares `Depends: libmpv2 | libmpv1`), and optionally `.AppImage` (if `appimagetool` is installed).
+**Outputs:** `publish/releases/linux-x64/<run>/HandyPlayer-<version>-linux-x64.tar.gz` (portable), `.deb` package (declares `Depends: libmpv2 | libmpv1`), and optionally `.AppImage` (if `appimagetool` is installed). Each run uses a fresh directory and retains previous output.
 
 ### Cross-Platform Considerations
 

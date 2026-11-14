@@ -8,8 +8,9 @@ cd "$(dirname "$0")" || exit 1
 CONFIGURATION="${1:-Release}"
 APP_NAME="HandyPlayer"
 RID="osx-arm64"
-PUBLISH_DIR="publish/$RID"
-APP_BUNDLE="publish/$APP_NAME.app"
+handy_release_begin "$RID" || exit 1
+PUBLISH_DIR="$RELEASE_ROOT/$RID"
+APP_BUNDLE="$RELEASE_ROOT/$APP_NAME.app"
 CSPROJ="src/HandyPlaylistPlayer.App/HandyPlaylistPlayer.App.csproj"
 
 # Read version from csproj (sed works on both GNU and BSD/macOS)
@@ -24,14 +25,11 @@ echo "========================================="
 # PREBUILT_DIR: optional folder with an osx-arm64 publish produced elsewhere (e.g. cross-published on
 # Windows with: dotnet publish src/HandyPlaylistPlayer.App -c Release -r osx-arm64 --self-contained -o <dir>).
 # Then only bundling/signing/packaging runs here and no .NET SDK is needed on the Mac.
-rm -rf "$APP_BUNDLE"
 if [ -n "$PREBUILT_DIR" ]; then
     echo "Using prebuilt publish output: $PREBUILT_DIR"
     PUBLISH_DIR="$PREBUILT_DIR"
     KEEP_PUBLISH_DIR=1
 else
-    rm -rf "$PUBLISH_DIR"
-
     # Publish self-contained
     RESTORE_ARGS=()
     [ "${HANDY_NO_RESTORE:-0}" = 1 ] && RESTORE_ARGS=(--no-restore)
@@ -250,10 +248,9 @@ echo "  To test: open $APP_BUNDLE"
 echo ""
 echo "--- Creating ZIP ---"
 ZIP_NAME="$ARCHIVE_NAME.zip"
-ZIP_PATH="publish/$ZIP_NAME"
-rm -f "$ZIP_PATH"
+ZIP_PATH="$RELEASE_ROOT/$ZIP_NAME"
 
-(cd publish && zip -r -y "$ZIP_NAME" "$APP_NAME.app")
+(cd "$RELEASE_ROOT" && zip -r -y "$ZIP_NAME" "$APP_NAME.app")
 
 if [ -f "$ZIP_PATH" ]; then
     SIZE=$(du -sh "$ZIP_PATH" | cut -f1)
@@ -266,10 +263,8 @@ fi
 echo ""
 echo "--- Creating DMG ---"
 DMG_NAME="$ARCHIVE_NAME.dmg"
-DMG_PATH="publish/$DMG_NAME"
-DMG_STAGING="publish/dmg-staging"
-rm -f "$DMG_PATH"
-rm -rf "$DMG_STAGING"
+DMG_PATH="$RELEASE_ROOT/$DMG_NAME"
+DMG_STAGING="$RELEASE_ROOT/dmg-staging"
 
 mkdir -p "$DMG_STAGING"
 cp -R "$APP_BUNDLE" "$DMG_STAGING/"

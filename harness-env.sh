@@ -22,3 +22,16 @@ export TMP="$TMPDIR" TEMP="$TMPDIR"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 mkdir -p "$NUGET_PACKAGES" "$DOTNET_CLI_HOME" "$NUGET_HTTP_CACHE_PATH" \
     "$NUGET_PLUGINS_CACHE_PATH" "$TMPDIR" || return 1
+
+handy_release_begin() {
+    # Fresh output prevents cleanup from replacing another release's evidence.
+    case "$1" in win-x64|linux-x64|osx-arm64) ;; *) return 1 ;; esac
+    local part parent="$HANDY_ROOT"
+    for part in publish releases "$1"; do
+        parent="$parent/$part"
+        [ ! -L "$parent" ] || { echo "Release output must not use a symlink: $parent" >&2; return 1; }
+        mkdir -p "$parent" || return 1
+    done
+    RELEASE_ROOT=$(mktemp -d "$parent/run.XXXXXXXX") || return 1
+    trap 'echo "Cleanup checkpoint: prior releases/caches retained; failed-run evidence retained on errors. Output: $RELEASE_ROOT"' EXIT
+}

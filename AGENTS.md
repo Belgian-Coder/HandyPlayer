@@ -1,5 +1,9 @@
 # HandyPlayer development
 
+`AGENTS.md` is canonical for Codex desktop. Root `CLAUDE.md` imports it for
+Claude Code. Open either agent from the repository root; preserve any selected
+model/reasoning settings and global configuration.
+
 This is a native Avalonia desktop app, not a browser app. Read `TECHNICAL.md`
 for project boundaries and `README.md` for native prerequisites and packaging.
 Keep device, emergency-stop, native-media and signing checks intact.
@@ -45,5 +49,19 @@ Use Windows `-NoRestore` or Bash `HANDY_NO_RESTORE=1` only after a restore for
 that same RID/self-contained configuration. `PREBUILT_DIR` on macOS reuses
 supplied output for packaging, not validation. Native prerequisites, installer
 failures and signature verification still apply. Do not publish/distribute a
-release solely because a filtered local run passed. No cleanup/deletion or
-live-device operation is implied by harness maintenance.
+release solely because a filtered local run passed. Releases use a new
+`publish/releases/<rid>/<run>/` directory; retain previous output and failed-run
+evidence. Installer/native prerequisites and signing gates remain required.
+
+After every commit and every release, perform a cleanup checkpoint before
+continuing or reporting completion. Remove only proven task-owned disposable
+scratch/fixtures and finished, clean, pushed worktrees after resolving paths
+and checking they remain inside this project. Before push retain the active
+worktree; repeat the checkpoint after push from the primary checkout. Preserve
+unknown/untracked data, user WIP, authentication material, release/audit/rollback
+evidence, warm package/HTTP/plugin/CLI caches and useful incremental `bin`/`obj`.
+Inspect ignored contents before removing a worktree; if any must be preserved,
+retain it and report the exact limit. Never use force removal, `git clean`,
+`git worktree prune`, recursive sweeps or blanket output/cache pruning. Keep the
+recovery branch. This bounded cleanup authorization does not permit unrelated
+deletion or live-device operations.

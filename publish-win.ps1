@@ -23,19 +23,18 @@ if ($LASTEXITCODE -ne 0 -or -not $version) {
 }
 
 $appName = "HandyPlayer"
-$portableDir = "publish/$appName-$version-win-x64"
-$buildDir = "publish/win-x64-build"
+$releaseRoot = New-HandyReleaseRoot 'win-x64'
+try {
+$portableDir = "$releaseRoot/$appName-$version-win-x64"
+$buildDir = "$releaseRoot/win-x64-build"
 $zipName = "$appName-$version-win-x64.zip"
-$zipPath = "publish/$zipName"
+$zipPath = "$releaseRoot/$zipName"
 $msiName = "$appName-$version-win-x64.msi"
-$msiPath = "publish/$msiName"
+$msiPath = "$releaseRoot/$msiName"
 
 Write-Host "Building $appName v$version for Windows x64..." -ForegroundColor Cyan
 
-# Clean previous output (including a stale MSI, so a failed WiX run can never leave an old installer behind)
-foreach ($p in $buildDir, $portableDir, $zipPath, $msiPath) {
-    if (Test-Path $p) { Remove-Item -Recurse -Force $p }
-}
+# All outputs belong to this fresh run; previous releases are retained.
 
 # Publish self-contained. The Media.Mpv project fails this step if libmpv-2.dll is missing.
 $restoreArgs = if ($NoRestore) { @('--no-restore') } else { @() }
@@ -60,7 +59,7 @@ Write-Host "Creating archive: $zipPath" -ForegroundColor Cyan
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory(
     (Resolve-Path $portableDir).Path,
-    (Join-Path (Resolve-Path "publish").Path $zipName),
+    $zipPath,
     [System.IO.Compression.CompressionLevel]::Optimal,
     $true  # include base directory name in zip
 )
@@ -105,8 +104,7 @@ if ($wixCmd) {
 }
 
 # --- setup.exe installer (per-user, optional; requires Inno Setup 6: winget install JRSoftware.InnoSetup) ---
-$setupPath = "publish/$appName-$version-win-x64-setup.exe"
-if (Test-Path $setupPath) { Remove-Item -Force $setupPath }
+$setupPath = "$releaseRoot/$appName-$version-win-x64-setup.exe"
 $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
 if (-not $iscc) {
     $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
@@ -115,7 +113,7 @@ if (-not $iscc) {
 if ($iscc) {
     Write-Host ""
     Write-Host "Building setup.exe installer: $setupPath" -ForegroundColor Cyan
-    & $iscc /Q "/DAppVersion=$version" installer-win.iss
+    & $iscc /Q "/DAppVersion=$version" "/DSourceDir=$portableDir" "/O$releaseRoot" installer-win.iss
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $setupPath)) {
         Write-Host "Inno Setup build failed (iscc returned $LASTEXITCODE)" -ForegroundColor Red
         exit 1
@@ -136,11 +134,14 @@ if (Test-Path $msiPath) {
 # SHA-256 checksums for everything shipped, next to the artifacts.
 $artifacts = @(Get-Item $zipPath) + @(Get-Item $msiPath, $setupPath -ErrorAction SilentlyContinue)
 $artifacts | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name } |
-    Set-Content "publish/SHA256SUMS-win-x64.txt" -Encoding ascii
-Write-Host "  Checksums: publish/SHA256SUMS-win-x64.txt" -ForegroundColor White
+    Set-Content "$releaseRoot/SHA256SUMS-win-x64.txt" -Encoding ascii
+Write-Host "  Checksums: $releaseRoot/SHA256SUMS-win-x64.txt" -ForegroundColor White
 
 Write-Host ""
 Write-Host "Portable:  Extract the zip and run $appName.exe" -ForegroundColor Yellow
 if (Test-Path $msiPath) {
     Write-Host "Installer: Run the .msi to install to Program Files" -ForegroundColor Yellow
+}
+} finally {
+    Write-Host "Cleanup checkpoint: prior releases/caches retained; failed-run evidence retained on errors. Output: $releaseRoot"
 }
