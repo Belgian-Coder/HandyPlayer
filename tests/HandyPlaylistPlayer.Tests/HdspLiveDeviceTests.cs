@@ -7,15 +7,21 @@ namespace HandyPlaylistPlayer.Tests;
 
 /// <summary>
 /// Live integration tests against a real Handy device.
-/// These tests require a device to be online and reachable.
-/// Run with: dotnet test --filter "Category=LiveDevice"
+/// These tests require a device to be online and reachable, and HANDY_CONNECTION_KEY set to its connection key.
+/// Without either they are reported as skipped. Run only these with:
+///   dotnet test --project tests/HandyPlaylistPlayer.Tests -- --filter-trait "Category=LiveDevice"
 /// </summary>
 [Trait("Category", "LiveDevice")]
 public class HdspLiveDeviceTests : IDisposable
 {
-    private const string ConnectionKey = "g6zPaXWz";
+    // Never commit a real key: set HANDY_CONNECTION_KEY to run these against your own device.
+    private static readonly string ConnectionKey =
+        Environment.GetEnvironmentVariable("HANDY_CONNECTION_KEY") ?? "";
     private readonly HttpClient _client;
     private readonly List<string> _log = [];
+
+    // Checked once per test run (not once per test) so an offline device costs one timeout, not nine.
+    private static readonly Lazy<Task<bool>> DeviceOnline = new(CheckDeviceOnlineAsync);
 
     public HdspLiveDeviceTests()
     {
@@ -27,9 +33,40 @@ public class HdspLiveDeviceTests : IDisposable
         _client.DefaultRequestHeaders.Add("X-Connection-Key", ConnectionKey);
     }
 
+    private static async Task<bool> CheckDeviceOnlineAsync()
+    {
+        if (ConnectionKey.Length == 0)
+            return false;
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri("https://www.handyfeeling.com/api/handy/v2/"),
+            Timeout = TimeSpan.FromSeconds(10)
+        };
+        client.DefaultRequestHeaders.Add("X-Connection-Key", ConnectionKey);
+        try
+        {
+            var response = await client.GetFromJsonAsync<HandyConnectedResponse>("connected");
+            return response?.Connected == true;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>xUnit v3 runtime skip: marks the test Skipped (not Failed) when no device is online.</summary>
+    private static async Task RequireDeviceAsync()
+    {
+        if (!await DeviceOnline.Value)
+            Assert.Skip(ConnectionKey.Length == 0
+                ? "HANDY_CONNECTION_KEY not set; live device test skipped."
+                : "No Handy device online; live device test skipped.");
+    }
+
     [Fact]
     public async Task Device_IsConnected()
     {
+        await RequireDeviceAsync();
         var response = await _client.GetFromJsonAsync<HandyConnectedResponse>("connected");
         _log.Add($"Connected: {response?.Connected}");
         Assert.NotNull(response);
@@ -39,13 +76,7 @@ public class HdspLiveDeviceTests : IDisposable
     [Fact]
     public async Task Device_CanGetInfo()
     {
-        var connected = await _client.GetFromJsonAsync<HandyConnectedResponse>("connected");
-        if (connected?.Connected != true)
-        {
-            _log.Add("Device not connected — skipping info test");
-            return;
-        }
-
+        await RequireDeviceAsync();
         var info = await _client.GetFromJsonAsync<HandyInfoResponse>("info");
         _log.Add($"Model: {info?.Model}, FW: {info?.FwVersion}, HW: {info?.HwVersion}");
         Assert.NotNull(info);
@@ -54,6 +85,7 @@ public class HdspLiveDeviceTests : IDisposable
     [Fact]
     public async Task Device_CanGetSlideRange()
     {
+        await RequireDeviceAsync();
         var slide = await _client.GetFromJsonAsync<HandySlideResponse>("slide");
         _log.Add($"Slide range: {slide?.Min} - {slide?.Max}");
         Assert.NotNull(slide);
@@ -65,6 +97,7 @@ public class HdspLiveDeviceTests : IDisposable
     [Fact]
     public async Task Hdsp_SetMode_Succeeds()
     {
+        await RequireDeviceAsync();
         // Set to HDSP mode (mode 2)
         using var response = await _client.PutAsJsonAsync("mode", new HandyModeRequest { Mode = 2 });
         var body = await response.Content.ReadAsStringAsync();
@@ -75,6 +108,7 @@ public class HdspLiveDeviceTests : IDisposable
     [Fact]
     public async Task Hdsp_SendPosition0_Succeeds()
     {
+        await RequireDeviceAsync();
         // Ensure HDSP mode
         using var modeResp = await _client.PutAsJsonAsync("mode", new HandyModeRequest { Mode = 2 });
         modeResp.EnsureSuccessStatusCode();
@@ -90,6 +124,7 @@ public class HdspLiveDeviceTests : IDisposable
     [Fact]
     public async Task Hdsp_SendPosition100_Succeeds()
     {
+        await RequireDeviceAsync();
         using var modeResp = await _client.PutAsJsonAsync("mode", new HandyModeRequest { Mode = 2 });
         modeResp.EnsureSuccessStatusCode();
 
@@ -103,6 +138,7 @@ public class HdspLiveDeviceTests : IDisposable
     [Fact]
     public async Task Hdsp_FullStrokeTest_MovesDeviceFullRange()
     {
+        await RequireDeviceAsync();
         // Set HDSP mode
         using var modeResp = await _client.PutAsJsonAsync("mode", new HandyModeRequest { Mode = 2 });
         modeResp.EnsureSuccessStatusCode();
@@ -136,6 +172,7 @@ public class HdspLiveDeviceTests : IDisposable
     [Fact]
     public async Task Hdsp_SimulatedPlayback_SendsRealisticPositions()
     {
+        await RequireDeviceAsync();
         // Set HDSP mode
         using var modeResp = await _client.PutAsJsonAsync("mode", new HandyModeRequest { Mode = 2 });
         modeResp.EnsureSuccessStatusCode();
@@ -189,6 +226,7 @@ public class HdspLiveDeviceTests : IDisposable
     [Fact]
     public async Task Hdsp_ActionBasedTargets_DeviceMovesCorrectly()
     {
+        await RequireDeviceAsync();
         // This test exercises the EXACT logic the tick engine uses:
         // send the NEXT action's target position, not interpolated intermediate values.
 
@@ -260,6 +298,7 @@ public class HdspLiveDeviceTests : IDisposable
     [Fact]
     public async Task Hdsp_RealTickEngine_WithMockPlayer_DeviceMoves()
     {
+        await RequireDeviceAsync();
         // This test uses the REAL StreamingTickEngine + REAL HandyApiClient
         // with a mock media player. If device moves correctly here but not
         // in the app, the issue is VLC time reporting.

@@ -1,6 +1,9 @@
 #!/bin/bash
 # Publish HandyPlayer for macOS ARM64 (self-contained, no .NET required)
 
+# All paths below are repo-relative; work from any current directory.
+cd "$(dirname "$0")" || exit 1
+
 CONFIGURATION="${1:-Release}"
 APP_NAME="HandyPlayer"
 RID="osx-arm64"

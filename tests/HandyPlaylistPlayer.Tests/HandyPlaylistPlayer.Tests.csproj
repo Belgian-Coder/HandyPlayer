@@ -2,16 +2,18 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
     <NoWarn>xUnit1051</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- coverlet.collector only works with VSTest; the solution runs tests on Microsoft.Testing.Platform (global.json). -->
+    <!-- Tests run on Microsoft.Testing.Platform (global.json), which xunit.v3 hosts natively. Do not add the VSTest
+         packages (Microsoft.NET.Test.Sdk, xunit.runner.visualstudio, coverlet.collector): they are unused here, and Microsoft.NET.Test.Sdk
+         pulls in Microsoft.CodeCoverage, whose MsCoverageReferencedPathMaps target runs an extra MSBuild pass over every
+         referenced project before each compile. -->
     <PackageReference Include="coverlet.MTP" Version="10.1.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
     <PackageReference Include="NSubstitute" Version="6.2.0" />
     <PackageReference Include="xunit.v3" Version="4.0.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="23.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
     <!-- Avalonia types needed for AccentColors + resource-dictionary tests.

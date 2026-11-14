@@ -34,7 +34,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IDispatcher _dispatcher;
     private readonly HandyApiClient _handyClient;
     private readonly PlayerViewModel _playerViewModel;
-    private readonly MpvMediaPlayerAdapter _mpvAdapter;
+    private readonly IVideoPlayer _mpvAdapter;
     private readonly DatabaseConfig _dbConfig;
     private readonly IPlaylistRepository _playlistRepo;
     private readonly IPresetRepository _presetRepo;
@@ -402,7 +402,7 @@ public partial class SettingsViewModel : ObservableObject
         IDispatcher dispatcher,
         HandyApiClient handyClient,
         PlayerViewModel playerViewModel,
-        MpvMediaPlayerAdapter mpvAdapter,
+        IVideoPlayer mpvAdapter,
         DatabaseConfig dbConfig,
         IPlaylistRepository playlistRepo,
         IPresetRepository presetRepo,
@@ -1567,9 +1567,7 @@ public partial class SettingsViewModel : ObservableObject
 
     // ── Logs ─────────────────────────────────────────────────────
 
-    private static string LogsDir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "HandyPlayer", "logs");
+    private static string LogsDir => Path.Combine(App.DataDir, "logs");
 
     [RelayCommand]
     private async Task SaveLogs(Window window)

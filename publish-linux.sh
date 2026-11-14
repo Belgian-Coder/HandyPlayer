@@ -1,10 +1,19 @@
 #!/bin/bash
 # Publish HandyPlayer for Linux x64 (self-contained, portable, no .NET required)
-set -e
+set -eo pipefail
+
+# All paths below are repo-relative; work from any current directory.
+cd "$(dirname "$0")"
 
 CONFIGURATION="${1:-Release}"
 APP_NAME="HandyPlayer"
-VERSION="1.1.0"
+CSPROJ="src/HandyPlaylistPlayer.App/HandyPlaylistPlayer.App.csproj"
+# Evaluated version from MSBuild (single source of truth; no silent fallback)
+VERSION=$(dotnet msbuild "$CSPROJ" -getProperty:Version -nologo | tr -d '[:space:]')
+if [ -z "$VERSION" ]; then
+    echo "ERROR: could not read <Version> from $CSPROJ" >&2
+    exit 1
+fi
 RID="linux-x64"
 PORTABLE_DIR="publish/$APP_NAME-$VERSION-linux-x64"
 PUBLISH_DIR="publish/$RID-build"
@@ -163,6 +172,7 @@ Section: video
 Priority: optional
 Architecture: amd64
 Installed-Size: $INSTALLED_SIZE
+Depends: libmpv2 | libmpv1
 Maintainer: HandyPlayer
 Description: Media player with Handy device synchronization
  Cross-platform media player for controlling The Handy using

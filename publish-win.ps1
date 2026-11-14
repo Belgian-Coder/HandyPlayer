@@ -1,26 +1,40 @@
 # Publish HandyPlayer for Windows x64 (self-contained, portable, no .NET required)
+#
+#   pwsh ./publish-win.ps1              # zip + MSI if WiX is installed
+#   pwsh ./publish-win.ps1 -RequireMsi  # fail when the MSI cannot be built
 param(
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    # Release builds: treat a missing WiX toolset as an error instead of skipping the MSI.
+    [switch]$RequireMsi
 )
 
 $ErrorActionPreference = "Stop"
+# All paths below are repo-relative; work from any current directory.
+Set-Location $PSScriptRoot
 
-# Read version from csproj
-[xml]$csproj = Get-Content "src/HandyPlaylistPlayer.App/HandyPlaylistPlayer.App.csproj"
-$version = $csproj.Project.PropertyGroup[0].Version
-if (-not $version) { $version = "1.0.0" }
+# Evaluated version from MSBuild (robust against property-group order; no silent fallback).
+$version = (dotnet msbuild src/HandyPlaylistPlayer.App/HandyPlaylistPlayer.App.csproj -getProperty:Version -nologo).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $version) {
+    Write-Host "Could not read <Version> from HandyPlaylistPlayer.App.csproj" -ForegroundColor Red
+    exit 1
+}
 
 $appName = "HandyPlayer"
 $portableDir = "publish/$appName-$version-win-x64"
 $buildDir = "publish/win-x64-build"
+$zipName = "$appName-$version-win-x64.zip"
+$zipPath = "publish/$zipName"
+$msiName = "$appName-$version-win-x64.msi"
+$msiPath = "publish/$msiName"
 
 Write-Host "Building $appName v$version for Windows x64..." -ForegroundColor Cyan
 
-# Clean previous output
-if (Test-Path $buildDir) { Remove-Item -Recurse -Force $buildDir }
-if (Test-Path $portableDir) { Remove-Item -Recurse -Force $portableDir }
+# Clean previous output (including a stale MSI, so a failed WiX run can never leave an old installer behind)
+foreach ($p in $buildDir, $portableDir, $zipPath, $msiPath) {
+    if (Test-Path $p) { Remove-Item -Recurse -Force $p }
+}
 
-# Publish self-contained
+# Publish self-contained. The Media.Mpv project fails this step if libmpv-2.dll is missing.
 dotnet publish src/HandyPlaylistPlayer.App `
     -c $Configuration `
     -r win-x64 `
@@ -36,12 +50,6 @@ if ($LASTEXITCODE -ne 0) {
 Copy-Item -Recurse $buildDir $portableDir
 Remove-Item -Recurse -Force $buildDir
 
-# Create zip archive
-$zipName = "$appName-$version-win-x64.zip"
-$zipPath = "publish/$zipName"
-
-if (Test-Path $zipPath) { Remove-Item $zipPath }
-
 Write-Host "Creating archive: $zipPath" -ForegroundColor Cyan
 
 # Use .NET ZipFile directly (more reliable than Compress-Archive with locked files)
@@ -56,17 +64,18 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
 Write-Host "  Archive: $zipPath ($zipSize MB)" -ForegroundColor White
 
-# --- MSI installer (requires WiX: dotnet tool install --global wix) ---
-$msiName = "$appName-$version-win-x64.msi"
-$msiPath = "publish/$msiName"
-
+# --- MSI installer (requires WiX: dotnet tool install --global wix --version 6.0.2) ---
 $wixCmd = Get-Command wix -ErrorAction SilentlyContinue
 if ($wixCmd) {
     Write-Host ""
     Write-Host "Building MSI installer: $msiPath" -ForegroundColor Cyan
 
-    # Ensure UI extension is available (suppress version warnings)
-    wix extension add WixToolset.UI.wixext/6.0.2 2>$null
+    # Ensure the UI extension is available. WiX prints "already installed" notes on stderr; under Windows
+    # PowerShell 5.1 that would be a terminating error with $ErrorActionPreference = Stop, so relax it here.
+    & {
+        $ErrorActionPreference = "Continue"
+        wix extension add WixToolset.UI.wixext/6.0.2 2>&1 | Out-Null
+    }
 
     wix build installer-win.wxs `
         -arch x64 `
@@ -75,17 +84,41 @@ if ($wixCmd) {
         -d SourceDir=$portableDir `
         -o $msiPath
 
-    if ($LASTEXITCODE -eq 0) {
-        $msiSize = [math]::Round((Get-Item $msiPath).Length / 1MB, 1)
-        Write-Host "  Installer: $msiPath ($msiSize MB)" -ForegroundColor White
-    } else {
-        Write-Host "  MSI build failed (wix build returned $LASTEXITCODE)" -ForegroundColor Yellow
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $msiPath)) {
+        Write-Host "MSI build failed (wix build returned $LASTEXITCODE)" -ForegroundColor Red
+        exit 1
     }
+    $msiSize = [math]::Round((Get-Item $msiPath).Length / 1MB, 1)
+    Write-Host "  Installer: $msiPath ($msiSize MB)" -ForegroundColor White
+} elseif ($RequireMsi) {
+    Write-Host "WiX not found and -RequireMsi was given. Install with:" -ForegroundColor Red
+    Write-Host "  dotnet tool install --global wix --version 6.0.2" -ForegroundColor Red
+    exit 1
 } else {
     Write-Host ""
     Write-Host "Skipping MSI (WiX not found). Install with:" -ForegroundColor Yellow
-    Write-Host "  dotnet tool install --global wix" -ForegroundColor Yellow
-    Write-Host "  wix extension add WixToolset.UI.wixext" -ForegroundColor Yellow
+    Write-Host "  dotnet tool install --global wix --version 6.0.2" -ForegroundColor Yellow
+}
+
+# --- setup.exe installer (per-user, optional; requires Inno Setup 6: winget install JRSoftware.InnoSetup) ---
+$setupPath = "publish/$appName-$version-win-x64-setup.exe"
+if (Test-Path $setupPath) { Remove-Item -Force $setupPath }
+$iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+if (-not $iscc) {
+    $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+              "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+if ($iscc) {
+    Write-Host ""
+    Write-Host "Building setup.exe installer: $setupPath" -ForegroundColor Cyan
+    & $iscc /Q "/DAppVersion=$version" installer-win.iss
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $setupPath)) {
+        Write-Host "Inno Setup build failed (iscc returned $LASTEXITCODE)" -ForegroundColor Red
+        exit 1
+    }
+} else {
+    Write-Host ""
+    Write-Host "Skipping setup.exe (Inno Setup not found)." -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -95,6 +128,13 @@ Write-Host "  Archive:  $zipPath ($zipSize MB)" -ForegroundColor White
 if (Test-Path $msiPath) {
     Write-Host "  Installer: $msiPath ($msiSize MB)" -ForegroundColor White
 }
+
+# SHA-256 checksums for everything shipped, next to the artifacts.
+$artifacts = @(Get-Item $zipPath) + @(Get-Item $msiPath, $setupPath -ErrorAction SilentlyContinue)
+$artifacts | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name } |
+    Set-Content "publish/SHA256SUMS-win-x64.txt" -Encoding ascii
+Write-Host "  Checksums: publish/SHA256SUMS-win-x64.txt" -ForegroundColor White
+
 Write-Host ""
 Write-Host "Portable:  Extract the zip and run $appName.exe" -ForegroundColor Yellow
 if (Test-Path $msiPath) {

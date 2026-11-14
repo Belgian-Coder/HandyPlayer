@@ -139,4 +139,13 @@ public class AutoPairingEngineTests
 
         Assert.Null(result);
     }
+
+    [Fact]
+    public async Task RunPairing_AlreadyCancelled_KeepsExistingPairings()
+    {
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => _engine.RunPairingAsync(new CancellationToken(canceled: true)));
+
+        await _pairingRepo.DidNotReceive().ClearAutoPairingsAsync();
+    }
 }

@@ -65,6 +65,26 @@ public partial class App : Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
 
+    /// <summary>
+    /// Per-user data directory (database, logs, thumbnails). <c>HANDYPLAYER_DATA_DIR</c> overrides the default
+    /// <c>%APPDATA%/HandyPlayer</c>, so UI tests and smoke tests of a published build never touch real user data.
+    /// </summary>
+    public static string DataDir { get; } = ResolveDataDir();
+
+    /// <summary>
+    /// Test hook: applied after the production registrations and before the provider is built, so tests can replace
+    /// services (e.g. the mpv player or the thumbnail generator) with fakes. Never set in production.
+    /// </summary>
+    public static Action<IServiceCollection>? ServiceOverrides { get; set; }
+
+    private static string ResolveDataDir()
+    {
+        var overridden = Environment.GetEnvironmentVariable("HANDYPLAYER_DATA_DIR");
+        return string.IsNullOrWhiteSpace(overridden)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HandyPlayer")
+            : Path.GetFullPath(overridden);
+    }
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -74,6 +94,7 @@ public partial class App : Application
     {
         var services = new ServiceCollection();
         ConfigureServices(services);
+        ServiceOverrides?.Invoke(services);
         var provider = services.BuildServiceProvider();
         Services = provider;
 
@@ -83,8 +104,7 @@ public partial class App : Application
         Task.Run(() => provider.GetRequiredService<DatabaseMigrator>().MigrateAsync()).GetAwaiter().GetResult();
 
         // Wire thumbnail directory into QueuePanelViewModel for hover-preview tooltips
-        var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HandyPlayer");
-        provider.GetRequiredService<QueuePanelViewModel>().SetThumbnailDir(Path.Combine(appDataDir, "thumbnails"));
+        provider.GetRequiredService<QueuePanelViewModel>().SetThumbnailDir(Path.Combine(DataDir, "thumbnails"));
 
         // Register shared brush instances BEFORE any controls are created.
         // This ensures all DynamicResource bindings are anchored to our mutable instances
@@ -93,9 +113,7 @@ public partial class App : Application
         Themes.AppThemes.Initialize();
 
         // Apply saved theme + accent synchronously so the window renders with the correct colors immediately.
-        var dbPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HandyPlayer", "handy.db");
-        LoadAndApplyAppearance(dbPath);
+        LoadAndApplyAppearance(Path.Combine(DataDir, "handy.db"));
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
@@ -145,12 +163,12 @@ public partial class App : Application
 
     private static void ConfigureServices(IServiceCollection services)
     {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var dataDir = Path.Combine(appData, "HandyPlayer");
+        var dataDir = DataDir;
 
-        // Migrate from old name if needed
+        // Migrate from old name if needed (default location only)
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         var oldDir = Path.Combine(appData, "HandyPlaylistPlayer");
-        if (!Directory.Exists(dataDir) && Directory.Exists(oldDir))
+        if (dataDir == Path.Combine(appData, "HandyPlayer") && !Directory.Exists(dataDir) && Directory.Exists(oldDir))
             Directory.Move(oldDir, dataDir);
 
         Directory.CreateDirectory(dataDir);
@@ -208,6 +226,7 @@ public partial class App : Application
 
         // Media player
         services.AddSingleton<MpvMediaPlayerAdapter>();
+        services.AddSingleton<IVideoPlayer>(sp => sp.GetRequiredService<MpvMediaPlayerAdapter>());
         var thumbnailDir = Path.Combine(dataDir, "thumbnails");
         var (thumbW, thumbH) = LoadThumbnailDimensions(dbPath);
         services.AddSingleton<IThumbnailService>(sp =>

@@ -205,4 +205,57 @@ public class PlaybackCoordinatorTests
 
         await _backend.Received().StopPlaybackAsync(Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task EmergencyStop_MediaPlayerThrows_StillStopsDevice()
+    {
+        _coordinator.SetMediaPlayer(_player);
+        _coordinator.SetDeviceBackend(_backend);
+        _player.StopAsync().Returns(Task.FromException(new IOException("mpv gone")));
+
+        await _coordinator.EmergencyStopAsync();
+
+        await _backend.Received(1).EmergencyStopAsync();
+        Assert.Equal(PlaybackState.Stopped, _coordinator.State);
+    }
+
+    [Fact]
+    public async Task EmergencyStop_StopsDeviceBeforeMediaPlayer()
+    {
+        _coordinator.SetMediaPlayer(_player);
+        _coordinator.SetDeviceBackend(_backend);
+
+        await _coordinator.EmergencyStopAsync();
+
+        Received.InOrder(() =>
+        {
+            _backend.EmergencyStopAsync();
+            _player.StopAsync();
+        });
+    }
+
+    [Theory]
+    [InlineData(DeviceConnectionState.Connecting)]
+    [InlineData(DeviceConnectionState.Error)]
+    public async Task EmergencyStop_DeviceNotFullyConnected_StillAttemptsStop(DeviceConnectionState state)
+    {
+        _coordinator.SetDeviceBackend(_backend);
+        _backend.ConnectionState.Returns(state);
+
+        await _coordinator.EmergencyStopAsync();
+
+        await _backend.Received(1).EmergencyStopAsync();
+    }
+
+    [Fact]
+    public async Task EmergencyStop_DeviceThrows_StillStopsMediaPlayer()
+    {
+        _coordinator.SetMediaPlayer(_player);
+        _coordinator.SetDeviceBackend(_backend);
+        _backend.EmergencyStopAsync().Returns(Task.FromException(new HttpRequestException("offline")));
+
+        await _coordinator.EmergencyStopAsync();
+
+        await _player.Received(1).StopAsync();
+    }
 }

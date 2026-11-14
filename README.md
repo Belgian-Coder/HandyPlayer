@@ -396,11 +396,21 @@ dotnet run --project src/HandyPlaylistPlayer.App
 
 ### Run Tests
 
-```bash
-dotnet test
+One command runs exactly what CI runs (restore, build with warnings as errors, unit + headless UI tests):
+
+```powershell
+pwsh ./validate.ps1            # add -Coverage for a Cobertura report in TestResults/
 ```
 
-9 of the 271 tests require a physical Handy device and are skipped automatically when no device is connected.
+- **Unit tests** (`tests/HandyPlaylistPlayer.Tests`): core logic, plus storage tests against a real SQLite database in a temp file and offline Handy wire-protocol tests.
+- **UI tests** (`tests/HandyPlaylistPlayer.UiTests`): the real app (XAML, view models, database) on Avalonia's headless platform, driven through real controls; only mpv, the device and thumbnails are faked. No display, libmpv or device needed. Screenshots of each step (and of any failure) land in `tests/HandyPlaylistPlayer.UiTests/bin/Release/net11.0/ui-artifacts/`.
+- **Live device tests** (`Category=LiveDevice`) are excluded by default. To run them against your own Handy, set `HANDY_CONNECTION_KEY` and run:
+
+```powershell
+dotnet test --project tests/HandyPlaylistPlayer.Tests -c Release --filter-trait "Category=LiveDevice"
+```
+
+The app reads `HANDYPLAYER_DATA_DIR` (default `%APPDATA%\HandyPlayer`) for its database, logs and thumbnails, so tests and smoke runs never touch your real library.
 
 ---
 
@@ -420,13 +430,12 @@ Each platform has a publish script that produces a portable archive and an insta
 | `publish/HandyPlayer-1.1.0-win-x64.zip` | Portable | Extract and run `HandyPlayer.exe` |
 | `publish/HandyPlayer-1.1.0-win-x64.msi` | Installer | Standard Windows MSI, installs to Program Files with Start Menu shortcut |
 
-The MSI installer requires [WiX Toolset v5](https://wixtoolset.org/). One-time setup:
+The MSI installer requires [WiX Toolset 6.0.2](https://wixtoolset.org/). One-time setup (the script adds the matching UI extension itself):
 ```powershell
-dotnet tool install --global wix
-wix extension add WixToolset.UI.wixext
+dotnet tool install --global wix --version 6.0.2
 ```
 
-If WiX is not installed, the script still produces the portable zip and skips the MSI.
+If WiX is not installed, the script still produces the portable zip and skips the MSI; pass `-RequireMsi` to make that an error. A failed MSI build fails the script. The publish also fails if `libmpv-2.dll` is missing, instead of shipping a player that cannot play video. `publish/SHA256SUMS-win-x64.txt` lists checksums for the zip and MSI.
 
 ### macOS ARM64
 
@@ -546,7 +555,7 @@ src/
   HandyPlaylistPlayer.Devices.Intiface/  # Buttplug/Intiface client
   HandyPlaylistPlayer.Storage/         # SQLite database layer
 tests/
-  HandyPlaylistPlayer.Tests/           # Unit tests (271 tests, 9 require hardware)
+  HandyPlaylistPlayer.Tests/           # Unit tests (281 tests, 10 live-device tests skip without hardware)
 ```
 
 For detailed technical documentation, architecture diagrams, and design patterns, see [TECHNICAL.md](TECHNICAL.md).

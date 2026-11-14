@@ -33,7 +33,7 @@ public record MpvTrack(string Type, int Id, string Title, string Lang, string Co
 ///   1. Constructor — mpv_create() + set options
 ///   2. SetWindowHandle() — mpv_initialize() + start event loop
 /// </summary>
-public class MpvMediaPlayerAdapter : IMediaPlayer
+public class MpvMediaPlayerAdapter : IVideoPlayer
 {
     private readonly ILogger<MpvMediaPlayerAdapter> _logger;
     private readonly IntPtr _mpv;

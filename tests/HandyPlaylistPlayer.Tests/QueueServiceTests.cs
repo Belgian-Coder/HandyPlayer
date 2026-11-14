@@ -500,4 +500,44 @@ public class QueueServiceTests
         Assert.Equal(-1, svc.CurrentIndex);
         Assert.Equal("Alpha", svc.Items[0].Video.Filename);
     }
+
+    [Fact]
+    public void NextAtEnd_ThenPrevious_GoesToThePreviousItem()
+    {
+        var svc = new QueueService();
+        svc.Enqueue([MakeItem(1, "A"), MakeItem(2, "B"), MakeItem(3, "C")]);
+        svc.Next(); svc.Next(); svc.Next();       // A, B, C
+
+        Assert.Null(svc.Next());                  // end of queue, repeat off
+        Assert.Equal("C", svc.CurrentItem!.Video.Filename);
+
+        Assert.Equal("B", svc.Previous()!.Video.Filename);
+    }
+
+    [Fact]
+    public void EnqueueNext_KeepsHistoryPointingAtTheSameItems()
+    {
+        var svc = new QueueService();
+        svc.Enqueue([MakeItem(1, "A"), MakeItem(2, "B"), MakeItem(3, "C")]);
+        svc.JumpTo(2);                            // C
+        svc.JumpTo(0);                            // A (history: C)
+
+        svc.EnqueueNext(MakeItem(4, "D"));        // A, D, B, C — C moved from 2 to 3
+
+        Assert.Equal("C", svc.Previous()!.Video.Filename);
+    }
+
+    [Fact]
+    public void EnqueueNext_ThenNext_PlaysInsertedItem_ThenPreviousReturns()
+    {
+        var svc = new QueueService();
+        svc.Enqueue([MakeItem(1, "A"), MakeItem(2, "B")]);
+        svc.Next();                               // A
+
+        svc.EnqueueNext(MakeItem(3, "X"));
+
+        Assert.Equal("X", svc.Next()!.Video.Filename);
+        Assert.Equal("A", svc.Previous()!.Video.Filename);
+        Assert.Equal(new[] { 0, 1, 2 }, svc.Items.Select(i => i.QueueIndex));
+    }
 }

@@ -49,14 +49,22 @@ public class HandyApiClient : IDeviceBackend
         return await _timeSync.ProbeRttAsync(_httpClient, ct);
     }
 
+    private readonly Func<HttpMessageHandler>? _handlerFactory;
+
+    /// <param name="handlerFactory">
+    /// Test seam: supplies the HTTP handler instead of the default <see cref="SocketsHttpHandler"/>, so the wire
+    /// protocol can be exercised offline. Leave null in production.
+    /// </param>
     public HandyApiClient(
         IScriptHostingService hostingService,
         ServerTimeSyncService timeSync,
-        ILogger<HandyApiClient> logger)
+        ILogger<HandyApiClient> logger,
+        Func<HttpMessageHandler>? handlerFactory = null)
     {
         _hostingService = hostingService;
         _timeSync = timeSync;
         _logger = logger;
+        _handlerFactory = handlerFactory;
     }
 
     public void SetProtocol(HandyProtocol protocol)
@@ -100,7 +108,7 @@ public class HandyApiClient : IDeviceBackend
     {
         _connectionKey = key;
         _httpClient?.Dispose();
-        var handler = new SocketsHttpHandler
+        var handler = _handlerFactory?.Invoke() ?? new SocketsHttpHandler
         {
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
             PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
@@ -374,7 +382,8 @@ public class HandyApiClient : IDeviceBackend
         var lastUpdate = Interlocked.Read(ref _hsspLastUpdateTicks);
         var lastKnown = Interlocked.Read(ref _hsspLastKnownTimeMs);
         var elapsedMs = (now - lastUpdate) * 1000 / freq;
-        var estimatedDeviceTime = lastKnown + elapsedMs;
+        // The device advances through the script at the playback rate, not at wall-clock speed.
+        var estimatedDeviceTime = lastKnown + (long)(elapsedMs * _playbackRate);
         var drift = Math.Abs(estimatedDeviceTime - mediaTimeMs);
 
         // Update tracking (atomic writes)
@@ -402,7 +411,7 @@ public class HandyApiClient : IDeviceBackend
                         EstimatedServerTime = serverTime,
                         StartTime = mediaTimeMs,
                         Loop = false,
-                        PlaybackRate = 1.0
+                        PlaybackRate = _playbackRate
                     }, HandyApiJson.Options, ct)) { }
                 _hsspPlaying = true;
                 _logger.LogInformation("HSSP hard resync completed at {Time}ms", mediaTimeMs);

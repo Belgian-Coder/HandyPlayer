@@ -13,6 +13,8 @@ public class AutoPairingEngine(
     public async Task RunPairingAsync(CancellationToken ct = default)
     {
         logger.LogInformation("Running auto-pairing...");
+        // Check before the destructive clear: an already-cancelled run must not wipe existing auto-pairings.
+        ct.ThrowIfCancellationRequested();
         await pairingRepo.ClearAutoPairingsAsync();
 
         var videos = await mediaRepo.GetAllVideosAsync();

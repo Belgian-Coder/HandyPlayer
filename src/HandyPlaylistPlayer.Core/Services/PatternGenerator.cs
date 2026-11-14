@@ -55,54 +55,54 @@ public class PatternGenerator
         return actions;
     }
 
+    /// <summary>
+    /// Duration of the fast edge in sawtooth/square waves: ~10% of the span, at least 20 ms (the shortest
+    /// move devices accept), never more than half the span.
+    /// </summary>
+    private static double EdgeMs(double spanMs) => Math.Min(Math.Max(20, spanMs / 10), spanMs / 2);
+
+    /// <summary>Ramp from min to max over one period, then drop back to min over a short edge.</summary>
     private static List<FunscriptAction> GenerateSawtooth(double freq, int min, int max, int durationMs)
     {
-        var periodMs = 1000.0 / freq;
-
-        var sawStep = Math.Max(20, (int)(periodMs / 2));
-        var actions = new List<FunscriptAction>((int)(durationMs / sawStep) + 1);
-        for (long t = 0; t <= durationMs; t += sawStep)
+        var periodMs = Math.Max(40, 1000.0 / freq);
+        var edgeMs = EdgeMs(periodMs);
+        var actions = new List<FunscriptAction>((int)(2 * durationMs / periodMs) + 2);
+        for (var start = 0.0; start <= durationMs; start += periodMs)
         {
-            var phase = (t % (long)Math.Max(1, periodMs)) / periodMs;
-            var pos = (int)Math.Round(min + phase * (max - min));
-            actions.Add(new FunscriptAction(t, Math.Clamp(pos, 0, 100)));
+            actions.Add(new FunscriptAction((long)Math.Round(start), min));
+            var peak = start + periodMs - edgeMs;
+            if (peak <= durationMs)
+                actions.Add(new FunscriptAction((long)Math.Round(peak), max));
         }
         return actions;
     }
 
+    /// <summary>Hold max for half a period, then min for half a period, with short transitions.</summary>
     private static List<FunscriptAction> GenerateSquare(double freq, int min, int max, int durationMs)
     {
-        var halfPeriodMs = Math.Max(20, (long)(500.0 / freq));
-        var actions = new List<FunscriptAction>((int)(durationMs / halfPeriodMs) + 1);
-
-        for (long t = 0; t <= durationMs; t += halfPeriodMs)
+        var halfPeriodMs = Math.Max(40, 500.0 / freq);
+        var edgeMs = EdgeMs(halfPeriodMs);
+        var actions = new List<FunscriptAction>((int)(2 * durationMs / halfPeriodMs) + 2);
+        var high = true;
+        for (var start = 0.0; start <= durationMs; start += halfPeriodMs, high = !high)
         {
-            var cycleIndex = t / halfPeriodMs;
-            var pos = cycleIndex % 2 == 0 ? max : min;
-            actions.Add(new FunscriptAction(t, pos));
+            var level = high ? max : min;
+            actions.Add(new FunscriptAction((long)Math.Round(start), level));
+            var holdEnd = start + halfPeriodMs - edgeMs;
+            if (holdEnd <= durationMs)
+                actions.Add(new FunscriptAction((long)Math.Round(holdEnd), level));
         }
         return actions;
     }
 
+    /// <summary>Linear min→max→min, one full cycle per period (interpolation draws the ramps).</summary>
     private static List<FunscriptAction> GenerateTriangle(double freq, int min, int max, int durationMs)
     {
-        var quarterPeriodMs = Math.Max(10, (long)(250.0 / freq));
-        var actions = new List<FunscriptAction>((int)(durationMs / quarterPeriodMs) + 1);
-
-        for (long t = 0; t <= durationMs; t += quarterPeriodMs)
-        {
-            var cyclePhase = (t / quarterPeriodMs) % 4;
-            var pos = cyclePhase switch
-            {
-                0 => min,
-                1 => max,
-                2 => min,
-                3 => max,
-                _ => min
-            };
-            // For triangle: interpolation happens automatically between points
-            actions.Add(new FunscriptAction(t, pos));
-        }
+        var halfPeriodMs = Math.Max(20, 500.0 / freq);
+        var actions = new List<FunscriptAction>((int)(durationMs / halfPeriodMs) + 1);
+        var rising = false;
+        for (var t = 0.0; t <= durationMs; t += halfPeriodMs, rising = !rising)
+            actions.Add(new FunscriptAction((long)Math.Round(t), rising ? max : min));
         return actions;
     }
 

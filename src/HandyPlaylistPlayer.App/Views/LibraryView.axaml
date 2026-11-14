@@ -61,6 +61,7 @@
                     </Button.Content>
                 </Button>
                 <Button Content="Add Folder"
+                        AutomationProperties.AutomationId="Library.AddFolder"
                         Command="{Binding AddRootCommand}"
                         CommandParameter="{Binding $parent[Window]}" />
             </StackPanel>

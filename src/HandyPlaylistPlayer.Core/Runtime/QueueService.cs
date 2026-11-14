@@ -32,6 +32,13 @@ public class QueueService : IQueueService
         item.QueueIndex = insertIndex;
         Items.Insert(insertIndex, item);
         ReindexFrom(insertIndex);
+
+        // Items at or after the insertion point moved down one slot; keep history pointing at the same items.
+        for (int h = 0; h < _history.Count; h++)
+        {
+            if (_history[h] >= insertIndex)
+                _history[h]++;
+        }
     }
 
     public void Remove(int index)
@@ -105,9 +112,6 @@ public class QueueService : IQueueService
             return CurrentItem;
         }
 
-        if (CurrentIndex >= 0)
-            _history.Add(CurrentIndex);
-
         var nextIndex = CurrentIndex + 1;
 
         if (ShuffleMode == ShuffleMode.ShuffleOnce && nextIndex >= Items.Count)
@@ -127,7 +131,12 @@ public class QueueService : IQueueService
             nextIndex = 0;
         }
 
+        // End of the queue: stay on the current item and leave history untouched, so Previous() still goes back.
         if (nextIndex >= Items.Count) return null;
+
+        // Recorded after any reshuffle above (which clears history and re-indexes the current item).
+        if (CurrentIndex >= 0)
+            _history.Add(CurrentIndex);
 
         SetCurrent(nextIndex);
         return CurrentItem;

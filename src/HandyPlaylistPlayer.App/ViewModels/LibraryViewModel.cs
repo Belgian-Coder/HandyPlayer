@@ -308,19 +308,29 @@ public partial class LibraryViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Shows the folder picker; returns the chosen local path or null. Replaceable so UI tests can drive the real
+    /// "Add Folder" button without an OS dialog.
+    /// </summary>
+    public Func<Window, Task<string?>> PickFolderAsync { get; set; } = async window =>
+    {
+        var folders = await window.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Select Library Folder",
+            AllowMultiple = false
+        });
+        return folders.Count > 0 ? folders[0].Path.LocalPath : null;
+    };
+
     [RelayCommand]
     private async Task AddRoot(Window window)
     {
         try
         {
-            var folders = await window.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            var path = await PickFolderAsync(window);
+            if (path != null)
             {
-                Title = "Select Library Folder",
-                AllowMultiple = false
-            });
-            if (folders.Count > 0)
-            {
-                var rootId = await _dispatcher.SendAsync(new AddLibraryRootCommand(folders[0].Path.LocalPath));
+                var rootId = await _dispatcher.SendAsync(new AddLibraryRootCommand(path));
                 await ScanRoot(rootId);
             }
         }

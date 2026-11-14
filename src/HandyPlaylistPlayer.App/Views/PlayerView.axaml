@@ -60,7 +60,7 @@
                                FontSize="{StaticResource FontSizeCaption}" Opacity="0.6"
                                IsVisible="{Binding ConnectionHealthText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                 </StackPanel>
-                <Button Grid.Column="1" Command="{Binding EmergencyStopActionCommand}"
+                <Button AutomationProperties.AutomationId="Player.EmergencyStop" Grid.Column="1" Command="{Binding EmergencyStopActionCommand}"
                         Classes="btn-danger" Content="EMERGENCY STOP" MinWidth="130"
                         ToolTip.Tip="Emergency Stop (Escape)" />
             </Grid>
@@ -209,7 +209,7 @@
                             <PathIcon Data="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z" Width="14" Height="14" />
                         </Button>
                         <!-- Play / Pause -->
-                        <Button Grid.Column="2" Command="{Binding PlayPauseCommand}"
+                        <Button AutomationProperties.AutomationId="Player.PlayPause" Grid.Column="2" Command="{Binding PlayPauseCommand}"
                                 Padding="10,6" Margin="0,0,2,0"
                                 ToolTip.Tip="Play / Pause">
                             <Panel>

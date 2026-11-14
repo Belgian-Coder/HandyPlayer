@@ -321,21 +321,41 @@ public class PlaybackCoordinator : IPlaybackCoordinator, IDisposable
     {
         _logger.LogWarning("Emergency stop triggered on coordinator");
 
-        if (_mediaPlayer != null)
-            await _mediaPlayer.StopAsync();
+        // Device first: stopping physical motion is the point of an emergency stop, so neither the tick engine
+        // nor the media player may prevent it. Every step is isolated; one failure never skips the next.
+        try
+        {
+            await StopStreamingEngineAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to stop streaming engine during emergency stop");
+        }
 
-        await StopStreamingEngineAsync();
-
-        // Use device-level emergency stop (more aggressive than normal stop)
-        if (_deviceBackend?.ConnectionState == DeviceConnectionState.Connected)
+        // Use device-level emergency stop (more aggressive than normal stop). Also attempted while the
+        // connection is still being established or in error: the device may be moving either way.
+        var device = _deviceBackend;
+        if (device != null && device.ConnectionState != DeviceConnectionState.Disconnected)
         {
             try
             {
-                await _deviceBackend.EmergencyStopAsync();
+                await device.EmergencyStopAsync();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to emergency stop device");
+            }
+        }
+
+        if (_mediaPlayer != null)
+        {
+            try
+            {
+                await _mediaPlayer.StopAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to stop media player during emergency stop");
             }
         }
 

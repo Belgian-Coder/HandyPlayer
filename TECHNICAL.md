@@ -76,7 +76,7 @@ HandyPlaylistPlayer.sln
 | **Devices.HandyApi** | Handy device control via HSSP/HDSP protocols | System.Net.Http.Json |
 | **Devices.Intiface** | Device control via Intiface Central | Buttplug 5.0.0 |
 | **Storage** | SQLite persistence, schema migrations | Microsoft.Data.Sqlite 10.0 |
-| **Tests** | Unit tests with mocked dependencies | xunit.v3 3.2, NSubstitute 5.3 |
+| **Tests** | Unit tests with mocked dependencies | xunit.v3 4.0.3, NSubstitute 6.2.0 |
 
 ---
 
@@ -629,33 +629,40 @@ Fullscreen hides the sidebar and bottom action bar, leaving only the video and a
 - **Mocking**: NSubstitute for interfaces
 - **Filesystem**: System.IO.Abstractions.TestingHelpers for testable file operations
 - **Pattern**: Each test class covers one service with focused Arrange-Act-Assert tests
+- **Storage**: real SQLite in a unique temp file per test (`StorageTests`), not mocks
+- **UI / end-to-end**: `tests/HandyPlaylistPlayer.UiTests` boots the real `App` on Avalonia's headless platform (Skia, no display) with a temp `HANDYPLAYER_DATA_DIR`, and drives real controls by `AutomationProperties.AutomationId`. Only native edges are faked via `App.ServiceOverrides`: `IVideoPlayer` (mpv), `IDeviceBackend`, `IThumbnailService`. Screenshots per step and on failure go to `bin/<config>/net11.0/ui-artifacts/`. Playwright does not apply (no web surface).
+- **Runner**: Microsoft.Testing.Platform (xunit.v3 native). Do not add the VSTest packages (`Microsoft.NET.Test.Sdk`, `xunit.runner.visualstudio`): `Microsoft.NET.Test.Sdk` pulls in `Microsoft.CodeCoverage`, whose build target re-invokes MSBuild on every project reference.
 
-### Test Coverage (271 tests: 262 unit + 9 hardware-only)
+### Test Coverage (336 tests: 317 unit + 9 headless UI + 10 live-device)
 
 | Test File | Service | Tests |
 |---|---|---|
 | FunscriptParserTests | JSON parsing, sorting, clamping | 7 |
 | FunscriptInterpolatorTests | Position interpolation, normalized position, boundary cases | 16 |
 | FilenameNormalizerTests | Tag stripping, normalization | 8 |
-| PatternGeneratorTests | All pattern types, ranges, reproducibility | 6 |
-| AutoPairingEngineTests | Matching rules, confidence, manual overrides | 8 |
-| QueueServiceTests | Queue operations, reorder, shuffle, history, sort, repeat | 38 |
-| PlaybackCoordinatorTests | State machine, load, play, device integration | 17 |
+| PatternGeneratorTests | All pattern types, ranges, reproducibility | 24 |
+| AutoPairingEngineTests | Matching rules, confidence, manual overrides | 9 |
+| QueueServiceTests | Queue operations, reorder, shuffle, history, sort, repeat | 41 |
+| PlaybackCoordinatorTests | State machine, load, play, device integration, emergency-stop ordering/isolation | 22 |
 | ScriptTransformPipelineTests | All transforms, speed limit, range, invert, intensity | 13 |
-| DispatcherTests | Handler resolution, validation, error handling | 13 |
+| DispatcherTests | Handler resolution, validation, error handling | 14 |
 | DeleteMediaFilesHandlerTests | Delete from disk, pairing cleanup, partial failure | 4 |
 | ToggleWatchedHandlerTests | Mark watched/unwatched | 2 |
-| ValidatorTests | All validators (playlists, presets, library, playback, device, pattern, settings) | 25 |
+| ValidatorTests | All validators (playlists, presets, library, playback, device, pattern, settings) | 35 |
 | HandyIntegrationTests | Handy API integration, script upload, time sync | 18 |
-| HdspPipelineTests | HDSP pipeline, transform, fire-and-forget | 9 |
-| HdspLiveDeviceTests | Hardware integration (requires physical device) | 10 |
-| AccentColorsTests | Theme + accent color system, custom colors | 13 |
-| MpvTrackTests | Audio/subtitle track parsing | 8 |
-| ExportImportTests | Settings export/import V3, M3U format, value validation | 13 |
-| PairingOffsetTests | Per-video script offset persistence | 3 |
+| HdspPipelineTests | HDSP pipeline, transform, tick engine against a mock device | 6 |
+| HdspLiveDeviceTests | Hardware integration (needs `HANDY_CONNECTION_KEY` + an online device; excluded by default) | 10 |
+| AccentColorsTests | Theme + accent color system, custom colors | 12 |
+| MpvTrackTests | Audio/subtitle track parsing | 10 |
+| ExportImportTests | Settings export/import V3, M3U format, value validation | 25 |
+| PairingOffsetTests | Per-video script offset persistence | 6 |
 | UpdatePairingOffsetHandlerTests | Pairing offset command handler | 3 |
 | GetMissingFilesHandlerTests | Missing file detection | 5 |
 | RelocateMediaFileHandlerTests | File relocation handler | 2 |
+| TickPlannerTests | Streaming keyframe planner: each keyframe once, resync on seek/resume, bursts, clamping | 12 |
+| StorageTests | Real SQLite: migrations, upserts, cascades, reorder, folder queries (wildcard-safe) | 10 |
+| HandyApiClientTests | Offline HSSP wire protocol via a recording HTTP handler | 4 |
+| **UiTests/AppJourneyTests** | Headless end-to-end: startup, sidebar navigation, Add Folder → index + pair, play → device sync → E-Stop, Space key | 9 |
 
 ---
 
@@ -675,10 +682,11 @@ dotnet build
 ### Run Tests
 
 ```bash
-dotnet test
+pwsh ./validate.ps1              # restore + build (-warnaserror) + unit + UI tests; what CI runs. -Coverage adds Cobertura
+dotnet test --project tests/HandyPlaylistPlayer.Tests -c Release --filter-trait "Category=LiveDevice"   # live device (needs HANDY_CONNECTION_KEY)
 ```
 
-271 tests total: 262 unit tests + 9 hardware-dependent tests (require a physical Handy device, auto-skipped otherwise).
+Filters use the xunit.v3 / Microsoft.Testing.Platform syntax (`--filter-trait`, `--filter-not-trait`, `--filter-class`), not VSTest's `--filter`.
 
 ### Run Application
 
@@ -716,7 +724,7 @@ The `NativeLibrary.SetDllImportResolver` in `MpvInterop` tries platform-specific
 ./publish-win.ps1
 ```
 
-**Outputs:** `publish/HandyPlayer-1.0.0-win-x64.zip` (portable) and `.msi` installer (requires [WiX Toolset v5](https://wixtoolset.org/)).
+**Outputs:** `publish/HandyPlayer-<version>-win-x64.zip` (portable), `.msi` installer (requires [WiX Toolset 6.0.2](https://wixtoolset.org/); `-RequireMsi` makes a missing WiX an error) and `publish/SHA256SUMS-win-x64.txt`. Publishing fails if `libmpv-2.dll` is missing.
 
 ### macOS ARM64 (Apple Silicon)
 
@@ -740,7 +748,7 @@ chmod +x publish-mac.sh
 ./publish-mac.sh
 ```
 
-**Outputs:** `publish/HandyPlayer-1.0.0-mac-arm64.zip` (portable) and `.dmg` installer.
+**Outputs:** `publish/HandyPlayer-<version>-mac-arm64.zip` (portable) and `.dmg` installer.
 
 **What the script does:**
 1. `dotnet publish` as self-contained for `osx-arm64`
@@ -788,7 +796,7 @@ chmod +x publish-linux.sh
 ./publish-linux.sh
 ```
 
-**Outputs:** `publish/HandyPlayer-1.0.0-linux-x64.tar.gz` (portable), `.deb` package, and optionally `.AppImage` (if `appimagetool` is installed).
+**Outputs:** `publish/HandyPlayer-<version>-linux-x64.tar.gz` (portable), `.deb` package (declares `Depends: libmpv2 | libmpv1`), and optionally `.AppImage` (if `appimagetool` is installed).
 
 ### Cross-Platform Considerations
 

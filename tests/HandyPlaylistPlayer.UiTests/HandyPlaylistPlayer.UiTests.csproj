@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Headless end-to-end UI tests: the real App.axaml, DI container, SQLite database (in a temp dir), views, view models
+    and command handlers, driven through real controls with headless mouse/keyboard input. Only the native edges are
+    faked: the mpv video player, the device backend and the thumbnail generator. No display, GPU, libmpv or device
+    is needed, so this runs on any CI runner. Playwright does not apply: the app has no web surface.
+
+    A separate test project (= separate process) because the App, its service provider and the view models are
+    process-wide singletons.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="4.0.3" />
+    <PackageReference Include="coverlet.MTP" Version="10.1.0" />
+    <!-- Not Avalonia.Headless.XUnit: 12.1.6 targets xunit.v3 3.x, so this project hosts its own HeadlessUnitTestSession. -->
+    <PackageReference Include="Avalonia.Headless" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HandyPlaylistPlayer.App\HandyPlaylistPlayer.App.csproj" />
+  </ItemGroup>
+</Project>

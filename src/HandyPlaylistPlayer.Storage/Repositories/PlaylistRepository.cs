@@ -256,6 +256,8 @@ public class PlaylistRepository(DatabaseConfig config) : IPlaylistRepository
         // Normalize path separator for LIKE query
         var normalizedPath = folderPath.Replace('\\', '/');
         if (!normalizedPath.EndsWith('/')) normalizedPath += '/';
+        // '%' and '_' are LIKE wildcards but legal in folder names: escape them so "a_b" never matches "axb".
+        var likePrefix = normalizedPath.Replace("^", "^^").Replace("%", "^%").Replace("_", "^_");
 
         var orderClause = sortOrder switch
         {
@@ -268,10 +270,10 @@ public class PlaylistRepository(DatabaseConfig config) : IPlaylistRepository
         cmd.CommandText = $"""
             SELECT mf.* FROM media_files mf
             WHERE mf.is_script = 0
-            AND (REPLACE(mf.full_path, '\', '/') LIKE @folder || '%')
+            AND (REPLACE(mf.full_path, '\', '/') LIKE @folder || '%' ESCAPE '^')
             ORDER BY {orderClause}
             """;
-        cmd.Parameters.AddWithValue("@folder", normalizedPath);
+        cmd.Parameters.AddWithValue("@folder", likePrefix);
         return await ReadMediaItems(cmd);
     }
 

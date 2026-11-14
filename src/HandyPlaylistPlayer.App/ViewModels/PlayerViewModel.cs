@@ -33,7 +33,7 @@ public partial class PlayerViewModel : ObservableObject
     private readonly IPlaybackCoordinator _coordinator;
     private readonly IQueueService _queue;
     private readonly HandyApiClient _handyClient;
-    private readonly MpvMediaPlayerAdapter _mpvAdapter;
+    private readonly IVideoPlayer _mpvAdapter;
     private readonly IMediaFileRepository _mediaFileRepo;
     private readonly IPlaybackHistoryRepository _historyRepo;
     private readonly ILogger<PlayerViewModel> _logger;
@@ -219,7 +219,8 @@ public partial class PlayerViewModel : ObservableObject
 
     public OverrideControlsViewModel OverrideControls { get; }
     public QueuePanelViewModel QueuePanel { get; }
-    public MpvMediaPlayerAdapter? MpvAdapter => _mpvAdapter;
+    /// <summary>The native mpv adapter, or null when a non-mpv <see cref="IVideoPlayer"/> is in use (UI tests).</summary>
+    public MpvMediaPlayerAdapter? MpvAdapter => _mpvAdapter as MpvMediaPlayerAdapter;
 
     public bool IsQueueVisible => QueuePanel.IsVisible;
 
@@ -228,7 +229,7 @@ public partial class PlayerViewModel : ObservableObject
         IPlaybackCoordinator coordinator,
         IQueueService queue,
         HandyApiClient handyClient,
-        MpvMediaPlayerAdapter mpvAdapter,
+        IVideoPlayer mpvAdapter,
         OverrideControlsViewModel overrideControls,
         QueuePanelViewModel queuePanel,
         IMediaFileRepository mediaFileRepo,

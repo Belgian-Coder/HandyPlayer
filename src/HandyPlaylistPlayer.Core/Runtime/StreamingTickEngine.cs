@@ -99,9 +99,7 @@ public class StreamingTickEngine : IDisposable
         var currentTickRate = _tickRateMs;
         var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(currentTickRate));
         int tickCount = 0;
-        // Tracks which keyframe index we last sent — advance sequentially so
-        // fast transitions (vibrations, rapid strokes) are never skipped.
-        int currentIndex = -1;
+        var planner = new TickPlanner();
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var actions = _script.Actions;
 
@@ -123,7 +121,7 @@ public class StreamingTickEngine : IDisposable
                     _logger.LogInformation(
                         "Tick engine summary: ticks={Ticks}, sends={Sends}, skipState={SkipState}, skipBefore={SkipBefore}, skipEnd={SkipEnd}, skipWait={SkipWait}, vlcState={State}, vlcTime={VlcTime}ms, currentIdx={Idx}/{Total}",
                         tickCount, sendCount, skipStateCount, skipBeforeCount, skipEndCount, skipWaitCount,
-                        vlcState, vlcTimeMs, currentIndex, actions.Count);
+                        vlcState, vlcTimeMs, planner.LastSentIndex, actions.Count);
                     lastSummaryMs = wallMs;
                 }
 
@@ -135,61 +133,38 @@ public class StreamingTickEngine : IDisposable
                 }
 
                 var mediaTimeMs = vlcTimeMs + _offsetMs;
+                var decision = planner.Plan(mediaTimeMs, CollectionsMarshal.AsSpan(actions));
 
-                // Find which keyframe index the media time has reached.
-                // This is the last action whose timestamp <= mediaTimeMs.
-                var mediaIndex = FindCurrentIndex(mediaTimeMs, actions);
-
-                if (mediaIndex < 0)
+                switch (decision.Outcome)
                 {
-                    // Before the first action — nothing to send yet
-                    skipBeforeCount++;
-                    tickCount++;
-                    continue;
+                    case TickOutcome.SkipBefore:
+                        skipBeforeCount++;
+                        tickCount++;
+                        continue;
+                    case TickOutcome.SkipEnd:
+                        skipEndCount++;
+                        WriteTrace(tickCount, wallMs, vlcState, vlcTimeMs, mediaTimeMs, -1, -1, -1, -1, -1, "skip_end");
+                        tickCount++;
+                        continue;
+                    case TickOutcome.SkipWait:
+                        skipWaitCount++;
+                        tickCount++;
+                        continue;
                 }
 
-                // On seek backward, reset to the new position
-                if (mediaIndex < currentIndex)
-                {
-                    _logger.LogInformation("Tick engine: seek backward detected, mediaIdx={MediaIdx} < currentIdx={CurrentIdx}",
-                        mediaIndex, currentIndex);
-                    currentIndex = mediaIndex - 1;
-                }
+                if (decision.Resynced)
+                    _logger.LogDebug("Tick engine: resync to keyframe {Index} at media time {Time}ms (last sent {Last})",
+                        decision.Index, mediaTimeMs, planner.LastSentIndex);
 
-                // The next keyframe to send is currentIndex + 1 (the one we're moving toward).
-                var sendIdx = currentIndex + 1;
-
-                if (sendIdx >= actions.Count)
-                {
-                    skipEndCount++;
-                    WriteTrace(tickCount, wallMs, vlcState, vlcTimeMs, mediaTimeMs, -1, -1, -1, -1, -1, "skip_end");
-                    tickCount++;
-                    continue;
-                }
-
-                // Only send when media time has passed or reached the previous keyframe
-                // (i.e., we've crossed to a new segment), matching MultiFunPlayer's approach.
-                if (sendIdx > 0 && mediaTimeMs < actions[sendIdx - 1].At)
-                {
-                    skipWaitCount++;
-                    tickCount++;
-                    continue;
-                }
-
-                var targetAction = actions[sendIdx];
-
-                // Duration = inter-keyframe gap (how long this movement takes in the script).
-                // This matches MultiFunPlayer: snapshot.Duration = keyframeTo.Position - keyframeFrom.Position
-                var prevAction = sendIdx > 0 ? actions[sendIdx - 1] : targetAction;
-                var durationMs = Math.Clamp((int)(targetAction.At - prevAction.At), 20, 5000);
-
+                var targetAction = actions[decision.Index];
+                var durationMs = decision.DurationMs;
                 var transformedPos = _pipeline.Transform(targetAction.Pos, mediaTimeMs);
 
                 string sendResult;
                 try
                 {
                     await _device.SendPositionAsync(transformedPos, durationMs, ct);
-                    currentIndex = sendIdx;
+                    planner.MarkSent(decision.Index);
                     sendCount++;
                     sendResult = "ok";
                 }
@@ -200,7 +175,7 @@ public class StreamingTickEngine : IDisposable
                 }
 
                 WriteTrace(tickCount, wallMs, vlcState, vlcTimeMs, mediaTimeMs,
-                    sendIdx, targetAction.At, targetAction.Pos,
+                    decision.Index, targetAction.At, targetAction.Pos,
                     transformedPos, durationMs, sendResult);
 
                 tickCount++;
@@ -232,13 +207,6 @@ public class StreamingTickEngine : IDisposable
                 tickCount, sendCount, skipStateCount, skipBeforeCount, skipEndCount, skipWaitCount);
         }
     }
-
-    /// <summary>
-    /// Binary search for the last action whose timestamp is &lt;= timeMs.
-    /// Returns -1 if timeMs is before all actions.
-    /// </summary>
-    private static int FindCurrentIndex(long timeMs, List<FunscriptAction> actions)
-        => FunscriptInterpolator.FindCurrentIndexCore(timeMs, CollectionsMarshal.AsSpan(actions));
 
     private void WriteTrace(int tick, long wallMs, PlaybackState state, long vlcTime, long mediaTime,
         int actionIdx, long targetAt, int rawPos, int transformedPos, int durationMs, string sent)
