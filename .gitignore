@@ -80,3 +80,8 @@ src/HandyPlaylistPlayer.Media.Mpv/runtimes/*/native/*.so.*
 
 ## Claude Code
 .claude/
+
+## Project-contained harness state and linked worktrees
+.worktrees/
+.harness/
+.harness-cache/

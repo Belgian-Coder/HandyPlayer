@@ -402,6 +402,32 @@ One command runs exactly what CI runs (restore, build with warnings as errors, u
 pwsh ./validate.ps1            # add -Coverage for a Cobertura report in TestResults/
 ```
 
+For focused edits, use `-Suite Unit` or `-Suite UI` and optionally
+`-Class '*PlaybackCoordinatorTests'` (xUnit MTP class glob). `-Plan` prints
+commands without invoking the SDK. `-NoRestore` reuses a matching restore;
+`-NoBuild` reuses current output. The default still validates the full solution
+with warnings as errors and both offline suites on every CI platform. A focused
+run is not the full release gate. Unit tests reference the App, so they still
+build the native desktop project and its dependencies.
+Empty test selections fail rather than reporting a successful filtered run.
+
+The validation/publish entry points keep CLI state, HTTP/plugin caches and
+temporary files under each checkout's ignored `.harness/`. NuGet packages are
+shared under the primary checkout's `.harness-cache/<os>-<arch>/packages`.
+Source `harness-env.ps1` (PowerShell) or `harness-env.sh` (Bash, from the repo root)
+before direct `dotnet` commands. Keep worktrees under `.worktrees/`, and never
+share `bin`/`obj` across checkouts or platforms. For manual app smoke runs, set
+`HANDYPLAYER_DATA_DIR` to a checkout-local `.harness/app-data` folder as well.
+`pwsh ./tests/Harness.Tests.ps1` checks command selection, gates and containment
+using a mock CLI, without the .NET SDK or application builds.
+
+Publishing already targets only the app and requested platform, using incremental
+compilation. After restoring that exact self-contained RID/configuration, use
+`pwsh ./publish-win.ps1 -NoRestore` or `HANDY_NO_RESTORE=1 ./publish-linux.sh`
+(also supported by `publish-mac.sh`) to avoid a redundant restore. Packaging
+still regenerates outputs and retains native-media, installer and signing checks.
+Run release scripts only when output replacement is intended.
+
 - **Unit tests** (`tests/HandyPlaylistPlayer.Tests`): core logic, plus storage tests against a real SQLite database in a temp file and offline Handy wire-protocol tests.
 - **UI tests** (`tests/HandyPlaylistPlayer.UiTests`): the real app (XAML, view models, database) on Avalonia's headless platform, driven through real controls; only mpv, the device and thumbnails are faked. No display, libmpv or device needed. Screenshots of each step (and of any failure) land in `tests/HandyPlaylistPlayer.UiTests/bin/Release/net11.0/ui-artifacts/`.
 - **Live device tests** (`Category=LiveDevice`) are excluded by default. To run them against your own Handy, set `HANDY_CONNECTION_KEY` and run:

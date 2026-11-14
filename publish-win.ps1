@@ -5,12 +5,15 @@
 param(
     [string]$Configuration = "Release",
     # Release builds: treat a missing WiX toolset as an error instead of skipping the MSI.
-    [switch]$RequireMsi
+    [switch]$RequireMsi,
+    # Reuse an existing self-contained win-x64 restore in this checkout.
+    [switch]$NoRestore
 )
 
 $ErrorActionPreference = "Stop"
 # All paths below are repo-relative; work from any current directory.
 Set-Location $PSScriptRoot
+. "$PSScriptRoot/harness-env.ps1"
 
 # Evaluated version from MSBuild (robust against property-group order; no silent fallback).
 $version = (dotnet msbuild src/HandyPlaylistPlayer.App/HandyPlaylistPlayer.App.csproj -getProperty:Version -nologo).Trim()
@@ -35,11 +38,12 @@ foreach ($p in $buildDir, $portableDir, $zipPath, $msiPath) {
 }
 
 # Publish self-contained. The Media.Mpv project fails this step if libmpv-2.dll is missing.
+$restoreArgs = if ($NoRestore) { @('--no-restore') } else { @() }
 dotnet publish src/HandyPlaylistPlayer.App `
     -c $Configuration `
     -r win-x64 `
     --self-contained `
-    -o $buildDir
+    -o $buildDir @restoreArgs
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed!" -ForegroundColor Red

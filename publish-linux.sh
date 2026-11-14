@@ -4,6 +4,7 @@ set -eo pipefail
 
 # All paths below are repo-relative; work from any current directory.
 cd "$(dirname "$0")"
+. ./harness-env.sh
 
 CONFIGURATION="${1:-Release}"
 APP_NAME="HandyPlayer"
@@ -24,11 +25,13 @@ echo "Building $APP_NAME v$VERSION for Linux x64..."
 rm -rf "$PUBLISH_DIR" "$PORTABLE_DIR"
 
 # Publish self-contained
+RESTORE_ARGS=()
+[ "${HANDY_NO_RESTORE:-0}" = 1 ] && RESTORE_ARGS=(--no-restore)
 dotnet publish src/HandyPlaylistPlayer.App \
     -c "$CONFIGURATION" \
     -r "$RID" \
     --self-contained \
-    -o "$PUBLISH_DIR"
+    -o "$PUBLISH_DIR" "${RESTORE_ARGS[@]}"
 
 # Create portable directory structure
 mkdir -p "$PORTABLE_DIR"

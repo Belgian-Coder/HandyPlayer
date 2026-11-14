@@ -3,6 +3,7 @@
 
 # All paths below are repo-relative; work from any current directory.
 cd "$(dirname "$0")" || exit 1
+. ./harness-env.sh || exit 1
 
 CONFIGURATION="${1:-Release}"
 APP_NAME="HandyPlayer"
@@ -32,11 +33,13 @@ else
     rm -rf "$PUBLISH_DIR"
 
     # Publish self-contained
+    RESTORE_ARGS=()
+    [ "${HANDY_NO_RESTORE:-0}" = 1 ] && RESTORE_ARGS=(--no-restore)
     dotnet publish src/HandyPlaylistPlayer.App \
         -c "$CONFIGURATION" \
         -r "$RID" \
         --self-contained \
-        -o "$PUBLISH_DIR"
+        -o "$PUBLISH_DIR" "${RESTORE_ARGS[@]}"
 
     if [ $? -ne 0 ]; then
         echo "ERROR: dotnet publish failed!"
