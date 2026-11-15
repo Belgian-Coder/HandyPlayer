@@ -184,6 +184,10 @@ uploader is an explicit local/remote adapter action, not a new CI workflow.
 The uploader checks draft state before each asset and afterward. GitHub does not
 provide an atomic draft-only asset upload, so another actor must not publish the
 same draft while an upload is running.
+After successful draft creation only, a missing exact-tag release gets at most
+four lookups, with waits of 0.5, 1 and 2 seconds between attempts. API errors
+and visible releases still reach the existing failure and identity checks
+immediately; the uploader never recreates a draft or retries conflicting bytes.
 
 ## Qualified candidate checkpoint (2026-11-15)
 

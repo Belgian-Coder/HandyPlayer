@@ -267,7 +267,14 @@ function Invoke-HandyDraftUpload {
         $null = Invoke-HandyDraftGh -Arguments @('release', 'create', $tag, '--repo', "github.com/$Repository",
             '--draft', '--target', $SourceSha, '--title', "ci-test $Target $PackageProfile $($SourceSha.Substring(0, 12))",
             '--notes-file', $notesPath)
-        $release = Get-HandyDraftRelease -Repository $Repository -Tag $tag
+        # A newly created draft can briefly be absent from the release list.
+        # Retry only absence after successful creation; API errors and any
+        # visible release still pass straight to the existing identity gates.
+        foreach ($delay in @(0, 500, 1000, 2000)) {
+            if ($delay -gt 0) { Start-Sleep -Milliseconds $delay }
+            $release = Get-HandyDraftRelease -Repository $Repository -Tag $tag
+            if ($null -ne $release) { break }
+        }
     }
     Assert-HandyDraftRelease -Release $release -Repository $Repository -Tag $tag -SourceSha $SourceSha
     Assert-HandyDraftAssets -Release $release -Expected $expected -Repository $Repository -Tag $tag -OutputDirectory $outputRoot

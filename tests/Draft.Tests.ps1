@@ -19,6 +19,7 @@ $script:publishAfterUpload = $false
 $script:noDigest = $false
 $script:remoteCommitSha = $script:sha
 $script:corruptDownload = $false
+$script:waits = [Collections.Generic.List[int]]::new()
 
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -51,7 +52,16 @@ function Reset-Mock {
     $script:noDigest = $false
     $script:remoteCommitSha = $script:sha
     $script:corruptDownload = $false
+    $script:waits.Clear()
+    $script:created = $false
+    $script:visibilityMisses = 0
+    $script:postCreateReads = 0
+    $script:postCreateFailure = ''
     $global:LASTEXITCODE = 0
+}
+function Start-Sleep {
+    param([int]$Milliseconds)
+    $script:waits.Add($Milliseconds)
 }
 function New-MockRelease {
     return [pscustomobject]@{
@@ -87,6 +97,14 @@ function gh {
         }
         if ($endpoint -eq 'repos/Belgian-Coder/HandyPlayer/releases?per_page=100') {
             Assert ($argv -contains '--paginate' -and $argv -contains '--slurp') 'Draft lookup must paginate.'
+            if ($script:created) {
+                $script:postCreateReads++
+                if ($script:postCreateFailure -eq 'api') {
+                    $global:LASTEXITCODE = 17
+                    return 'mock-sensitive-output'
+                }
+                if ($script:postCreateReads -le $script:visibilityMisses) { return '[[]]' }
+            }
             $pages = [object[]]::new(1)
             $pages[0] = if ($null -eq $script:release) { @() } else { @($script:release) }
             return ConvertTo-Json -InputObject $pages -Depth 30 -Compress
@@ -106,6 +124,17 @@ function gh {
             Assert ($notesIndex -ge 0 -and (Test-Path -LiteralPath $argv[$notesIndex + 1])) 'Deterministic notes file missing.'
             Assert ($argv -notcontains '--generate-notes') 'Generated release notes are forbidden.'
             $script:release = New-MockRelease
+            $script:created = $true
+            switch ($script:postCreateFailure) {
+                'non-draft' { $script:release.draft = $false }
+                'wrong-source' { $script:release.target_commitish = 'main' }
+                'wrong-asset' {
+                    $script:release.assets = @([pscustomobject]@{
+                        name = [IO.Path]::GetFileName($script:artifact.path); size = $script:artifact.size
+                        state = 'uploaded'; digest = 'sha256:' + ('f' * 64)
+                    })
+                }
+            }
             return 'https://github.com/premature-url-must-be-captured'
         }
         'upload' {
@@ -160,6 +189,7 @@ try {
     Assert ($manifest.sourceSha -ceq $script:sha -and $manifest.target -ceq 'win-x64') 'Manifest identity missing.'
     Assert ($manifest.nativeAcceptance -ceq 'not performed') 'Native acceptance attestation missing.'
     Assert ($manifest.packageProfile -ceq 'Full' -and $result[0].packageProfile -ceq 'Full') 'Draft profile binding missing.'
+    Assert ($script:waits.Count -eq 0) 'Immediately visible draft must not wait.'
 
     # Retry both the same request and a fresh request against exact existing assets.
     $script:calls.Clear()
@@ -168,6 +198,7 @@ try {
     $existing = Invoke-Upload $fresh
     Assert ($retry.url -ceq $existing.url) 'Idempotent retry changed release URL.'
     Assert (@($script:calls | Where-Object { $_[0] -eq 'release' -and $_[1] -in @('create', 'upload') }).Count -eq 0) 'Exact existing draft must not be mutated.'
+    Assert ($script:waits.Count -eq 0) 'Existing draft must not enter creation visibility waits.'
     Assert ((Get-FileHash -LiteralPath (Join-Path $createdDirectory 'draft-manifest.json')).Hash -ceq
         (Get-FileHash -LiteralPath (Join-Path $fresh 'draft-manifest.json')).Hash) 'Portable manifest is not deterministic.'
 
@@ -184,6 +215,40 @@ try {
     $script:corruptDownload = $false
     $script:failure = 'download'
     Assert-Throws { Invoke-Upload (New-Request 'failed-download') } '*GitHub CLI failed (exit 17)*'
+
+    Reset-Mock
+    $script:visibilityMisses = 3
+    $delayedDirectory = New-Request 'delayed-visibility'
+    $null = Invoke-Upload $delayedDirectory
+    Assert (($script:waits -join ',') -ceq '500,1000,2000') 'Delayed draft must use only the three bounded waits.'
+    Assert (@($script:calls | Where-Object { $_[0] -eq 'release' -and $_[1] -eq 'create' }).Count -eq 1) 'Delayed draft must not be recreated.'
+    Assert (@($script:calls | Where-Object { $_[0] -eq 'release' -and $_[1] -eq 'upload' }).Count -eq 2) 'Visible delayed draft must upload each missing asset once.'
+    Assert (Test-Path -LiteralPath (Join-Path $delayedDirectory 'draft-upload.json')) 'Delayed visibility success receipt missing.'
+
+    Reset-Mock
+    $script:visibilityMisses = 4
+    $absentDirectory = New-Request 'bounded-absence'
+    Assert-Throws { Invoke-Upload $absentDirectory } '*Draft release*was not found*'
+    Assert ($script:postCreateReads -eq 4 -and ($script:waits -join ',') -ceq '500,1000,2000') 'Absent draft lookup exceeded its four-attempt bound.'
+    Assert (@($script:calls | Where-Object { $_[0] -eq 'release' -and $_[1] -eq 'create' }).Count -eq 1) 'Absent draft must not be recreated.'
+    Assert (@($script:calls | Where-Object { $_[0] -eq 'release' -and $_[1] -eq 'upload' }).Count -eq 0) 'Absent draft must not upload assets.'
+    Assert (-not (Test-Path -LiteralPath (Join-Path $absentDirectory 'draft-upload.json'))) 'Absent draft must not write a success receipt.'
+
+    foreach ($failureCase in @(
+        @{ kind = 'api'; pattern = '*GitHub CLI failed (exit 17)*' },
+        @{ kind = 'non-draft'; pattern = '*is not a draft*' },
+        @{ kind = 'wrong-source'; pattern = '*exact source commit*' },
+        @{ kind = 'wrong-asset'; pattern = '*different SHA-256*' }
+    )) {
+        Reset-Mock
+        $script:postCreateFailure = $failureCase.kind
+        $failedDirectory = New-Request ('post-create-' + $failureCase.kind)
+        Assert-Throws { Invoke-Upload $failedDirectory } $failureCase.pattern
+        Assert ($script:postCreateReads -eq 1 -and $script:waits.Count -eq 0) 'Post-create error or invalid visible draft must fail immediately.'
+        Assert (@($script:calls | Where-Object { $_[0] -eq 'release' -and $_[1] -eq 'create' }).Count -eq 1) 'Post-create failure must not recreate the draft.'
+        Assert (@($script:calls | Where-Object { $_[0] -eq 'release' -and $_[1] -eq 'upload' }).Count -eq 0) 'Post-create failure must prevent asset uploads.'
+        Assert (-not (Test-Path -LiteralPath (Join-Path $failedDirectory 'draft-upload.json'))) 'Post-create failure must not write a success receipt.'
+    }
 
     Reset-Mock
     $script:remoteCommitSha = 'f' * 40
@@ -242,6 +307,7 @@ try {
         $directory = New-Request "failure-$operation"
         Assert-Throws { Invoke-Upload $directory } '*GitHub CLI failed (exit 17)*'
         Assert (-not (Test-Path -LiteralPath (Join-Path $directory 'draft-upload.json'))) 'Failure must not write a success receipt.'
+        Assert ($script:waits.Count -eq 0) 'API, create and upload errors must not enter visibility waits.'
         $operations = @($script:calls | Where-Object { $_[0] -eq 'release' } | ForEach-Object { $_[1] })
         if ($operation -in @('api', 'create')) { Assert ($operations -notcontains 'upload') 'CLI failure must stop later uploads.' }
         if ($operation -eq 'upload') { Assert (@($operations | Where-Object { $_ -eq 'upload' }).Count -eq 1) 'Upload failure must stop later assets.' }
@@ -348,5 +414,5 @@ try {
     Write-Output 'Draft uploader offline identity, draft-only, idempotence, hashes and failure checks passed.'
 } finally {
     # Retain ignored fixture evidence; remove only our in-process command mock.
-    Remove-Item Function:gh
+    Remove-Item Function:gh, Function:Start-Sleep
 }
