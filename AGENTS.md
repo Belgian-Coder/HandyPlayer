@@ -61,6 +61,12 @@ failures and signature verification still apply. Do not publish/distribute a
 release solely because a filtered local run passed. Releases use a new
 `publish/releases/<rid>/<run>/` directory; retain previous output and failed-run
 evidence. Installer/native prerequisites and signing gates remain required.
+For coordinated exact-source candidates, use `eng/release.ps1` and the declared
+capabilities in `eng/release-targets.json`; see `BUILDING.md`. Keep request output
+and receipts together. Upload is explicit and draft-only in the existing GitHub
+repository, with machine-local `gh` auth and exact source/artifact hashes. Never
+publish a public release, clobber mismatched assets or claim native acceptance
+from software/headless tests. Keep SSH transport/scheduling in the common client.
 
 ## Development workflow
 

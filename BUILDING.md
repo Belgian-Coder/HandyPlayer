@@ -70,12 +70,56 @@ artifact paths printed by that invocation. Preserve previous and failed runs.
 Publishing keeps incremental compilation and rebuilds packaging stages. Windows
 `-NoRestore` and Bash `HANDY_NO_RESTORE=1` require a matching successful
 self-contained restore for that RID/configuration in the same checkout.
+Publish builds default to two MSBuild workers and sequential project restore;
+Windows accepts `-MaxParallelism`, and Bash accepts `HANDY_MAX_PARALLELISM=1..64`.
 
 macOS `PREBUILT_DIR` supplies input for packaging; it is not native validation.
 The Mac script supports `osx-arm64` and ad-hoc signatures. It does not implement
 Developer ID signing, notarization, or an Intel Mac release lane.
 
-The repository defines no release upload destination or upload authentication.
-GitHub CI uploads test evidence only, using `actions/upload-artifact`; its
-workflow has `contents: read`. Delivery automation must identify the destination
-and credential mechanism separately and retain all existing acceptance gates.
+## Exact-source candidates and GitHub drafts
+
+`eng/release.ps1` adapts those same canonical scripts for a clean checkout at an
+exact committed SHA. `eng/release-targets.json` declares the default Windows VM
+and native ARM64 Mac builder capabilities for the shared SSH request client.
+The existing Linux x64 entry point remains directly usable; no Linux remote
+builder is declared without a compatible configured host.
+
+```powershell
+$sha = git rev-parse HEAD
+$output = Join-Path $PWD ('.harness/remote-release/' + [Guid]::NewGuid().ToString('N'))
+pwsh ./eng/release.ps1 -Target win-x64 -Mode plan -ExpectedSha $sha -OutputDirectory $output
+pwsh ./eng/release.ps1 -Target win-x64 -Mode validate -ExpectedSha $sha -OutputDirectory $output
+pwsh ./eng/release.ps1 -Target win-x64 -Mode package -ExpectedSha $sha -OutputDirectory $output
+```
+
+Plan mode performs no network or filesystem mutations. Other modes reject dirty
+source, SHA mismatch, a nonmatching native OS/architecture, output outside this
+checkout, unignored output and redirected output ancestors. A checkout lock
+protects adapter invocations. The same request directory holds validation logs,
+a SHA/target/checkout-bound `validation.json` receipt, fresh `artifacts/` and an
+`artifact-manifest.json` containing file sizes and SHA-256 hashes. Package mode
+reuses a matching same-request validation receipt, or runs the full gate when no
+receipt exists. Prior package output and failed-run logs are never overwritten.
+The guarded `HANDY_RELEASE_OUTPUT` override is adapter plumbing; ordinary
+publish scripts continue to create unique `publish/releases/<rid>/<run>/` roots.
+
+Explicit `-Mode upload` requires the same request's passing validation receipt
+and candidate manifest and verifies the files again. It uses machine-local
+`gh` authentication to create a **draft only** in the existing
+`Belgian-Coder/HandyPlayer` repository, tagged
+`ci-test-<target>-<full-commit-sha>`. Source commits must already exist in that
+GitHub repository. Existing exact assets are reusable; mismatched assets,
+changed tags or a non-draft release fail. No asset is overwritten and no public
+release is published. The portable `draft-manifest.json` records candidate hashes
+and `draft-upload.json` records the verified draft URL. Missing `gh` or local
+authentication is a prerequisite failure, never a reason to copy credentials.
+
+Software validation and macOS ad-hoc signature checks do not establish native
+playback/device/installer acceptance, Developer ID signing or notarization.
+Candidate manifests keep those limits explicit. GitHub CI still uploads only
+test evidence, using `actions/upload-artifact` with `contents: read`; the draft
+uploader is an explicit local/remote adapter action, not a new CI workflow.
+The uploader checks draft state before each asset and afterward. GitHub does not
+provide an atomic draft-only asset upload, so another actor must not publish the
+same draft while an upload is running.

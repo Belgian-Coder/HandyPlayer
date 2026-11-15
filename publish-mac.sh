@@ -37,6 +37,8 @@ else
         -c "$CONFIGURATION" \
         -r "$RID" \
         --self-contained \
+        "-maxcpucount:$HANDY_MAX_PARALLELISM" \
+        -p:RestoreDisableParallel=true \
         -o "$PUBLISH_DIR" "${RESTORE_ARGS[@]}"
 
     if [ $? -ne 0 ]; then

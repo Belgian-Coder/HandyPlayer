@@ -63,6 +63,7 @@ try {
     Assert ($global:HarnessCalls.Count -eq 0) 'Plan must never invoke dotnet.'
     Assert ($env:DOTNET_CLI_HOME -eq (Join-Path $root '.harness/dotnet')) 'CLI home escaped checkout.'
     Assert ($env:TMPDIR -eq (Join-Path $root '.harness/tmp')) 'Temporary files escaped checkout.'
+    Assert ($env:DOTNET_GENERATE_ASPNET_CERTIFICATE -eq 'false') 'Harness must not create unsolicited ASP.NET development certificates.'
     $common = git -C $root rev-parse --path-format=absolute --git-common-dir
     Assert ($env:NUGET_PACKAGES.StartsWith((Split-Path $common -Parent))) 'Package cache escaped primary project.'
     Assert (Test-Path $env:NUGET_PACKAGES) 'Package cache not initialized.'
