@@ -7,7 +7,7 @@ $root = Split-Path $PSScriptRoot -Parent
 $fixtureRoot = Join-Path $root ('.harness/draft-tests-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $fixtureRoot
 $script:sha = '0123456789abcdef0123456789abcdef01234567'
-$script:tag = "ci-test-win-x64-$script:sha"
+$script:tag = "ci-test-win-x64-full-$script:sha"
 $script:calls = [Collections.Generic.List[object]]::new()
 $script:payloads = @{}
 $script:release = $null
@@ -159,6 +159,7 @@ try {
     $manifest = $manifestText | ConvertFrom-Json
     Assert ($manifest.sourceSha -ceq $script:sha -and $manifest.target -ceq 'win-x64') 'Manifest identity missing.'
     Assert ($manifest.nativeAcceptance -ceq 'not performed') 'Native acceptance attestation missing.'
+    Assert ($manifest.packageProfile -ceq 'Full' -and $result[0].packageProfile -ceq 'Full') 'Draft profile binding missing.'
 
     # Retry both the same request and a fresh request against exact existing assets.
     $script:calls.Clear()
@@ -322,6 +323,27 @@ try {
         Assert (@(Get-ChildItem -LiteralPath $child -Force).Count -eq 0) 'Linked ancestor refusal must not create request files.'
     }
 
+    Reset-Mock
+    $profileDirectory = New-Request 'profile-bound'
+    $null = Invoke-Upload $profileDirectory
+    $script:calls.Clear()
+    Assert-Throws { Invoke-HandyDraftUpload -Repository 'Belgian-Coder/HandyPlayer' -SourceSha $script:sha -Target win-x64 `
+        -Artifacts @($script:artifact) -OutputDirectory $profileDirectory -NativeAcceptance 'not performed' -PackageProfile Candidate } '*differs; refusing to overwrite*'
+    Assert ($script:calls.Count -eq 0) 'Wrong profile reached GitHub.'
+    Reset-Mock
+    $script:tag = "ci-test-win-x64-candidate-$script:sha"
+    $candidateResult = Invoke-HandyDraftUpload -Repository 'Belgian-Coder/HandyPlayer' -SourceSha $script:sha -Target win-x64 `
+        -Artifacts @($script:artifact) -OutputDirectory (New-Request 'candidate') -NativeAcceptance 'not performed' -PackageProfile Candidate
+    Assert ($candidateResult.packageProfile -ceq 'Candidate' -and $candidateResult.tag -ceq $script:tag) 'Candidate draft profile/tag missing.'
+    Reset-Mock
+    $exePath = Join-Path $fixtureRoot 'HandyPlayer-test-win-x64-setup.exe'
+    [IO.File]::WriteAllText($exePath, 'mock optional installer')
+    $exeArtifact = [pscustomobject]@{ path=$exePath; size=(Get-Item -LiteralPath $exePath).Length
+        sha256=(Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash.ToLowerInvariant() }
+    $exeDirectory = New-Request 'candidate-exe-refused'
+    Assert-Throws { Invoke-HandyDraftUpload -Repository 'Belgian-Coder/HandyPlayer' -SourceSha $script:sha -Target win-x64 `
+        -Artifacts @($exeArtifact) -OutputDirectory $exeDirectory -NativeAcceptance 'not performed' -PackageProfile Candidate } '*must not upload an Inno EXE*'
+    Assert ($script:calls.Count -eq 0 -and @(Get-ChildItem -LiteralPath $exeDirectory -Force).Count -eq 0) 'Candidate EXE refusal mutated draft state.'
     $global:LASTEXITCODE = 0
     Write-Output 'Draft uploader offline identity, draft-only, idempotence, hashes and failure checks passed.'
 } finally {

@@ -9,11 +9,14 @@ param(
     [ValidateSet('plan', 'validate', 'package', 'upload')][string]$Mode = 'plan',
     [Parameter(Mandatory)][ValidatePattern('^[0-9a-fA-F]{40}$')][string]$ExpectedSha,
     [Parameter(Mandatory)][string]$OutputDirectory,
+    [ValidateSet('Candidate', 'Full')][string]$PackageProfile = 'Full',
     [ValidateRange(1, 64)][int]$MaxParallelism = 2
 )
 
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
+$PackageProfile = if ($PackageProfile -ieq 'Candidate') { 'Candidate' } else { 'Full' }
+if ($Target -ne 'win-x64' -and $PackageProfile -ne 'Full') { throw 'Candidate packaging profile applies only to Windows.' }
 $root = Split-Path $PSScriptRoot -Parent
 $validation = @{
     executable = 'pwsh'
@@ -22,7 +25,7 @@ $validation = @{
 $packaging = switch ($Target) {
     'win-x64' { @{
         executable = 'pwsh'
-        arguments = @('-NoProfile', '-NonInteractive', '-File', './publish-win.ps1', '-RequireMsi', '-MaxParallelism', "$MaxParallelism")
+        arguments = @('-NoProfile', '-NonInteractive', '-File', './publish-win.ps1', '-RequireMsi', '-PackageProfile', $PackageProfile, '-MaxParallelism', "$MaxParallelism")
     } }
     'osx-arm64' { @{ executable = 'bash'; arguments = @('./publish-mac.sh', 'Release') } }
     'linux-x64' { @{ executable = 'bash'; arguments = @('./publish-linux.sh', 'Release') } }
@@ -32,6 +35,7 @@ if ($Mode -eq 'plan') {
     [ordered]@{
         schemaVersion = 1; project = 'HandyPlayer'; target = $Target; sourceSha = $ExpectedSha.ToLowerInvariant()
         outputDirectory = $OutputDirectory; validation = $validation; packaging = $packaging
+        packageProfile = $PackageProfile
         uploadPolicy = 'draft-only'; repository = 'Belgian-Coder/HandyPlayer'
         nativeAcceptance = 'required separately; not performed by this adapter'
     } | ConvertTo-Json -Depth 6
@@ -90,6 +94,7 @@ try {
         [ordered]@{
             schemaVersion = 1; project = 'HandyPlayer'; sourceSha = $ExpectedSha.ToLowerInvariant()
             target = $Target; configuration = 'Release'; checkout = $root; status = 'passed'
+            packageProfile = $PackageProfile
             command = $validation; completedUtc = [DateTime]::UtcNow.ToString('o')
             nativeAcceptance = 'not performed'
         } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $receiptPath -Encoding utf8
@@ -102,6 +107,7 @@ try {
         $receipt.configuration -ne 'Release' -or $receipt.checkout -ne $root -or $receipt.status -ne 'passed') {
         throw 'Validation receipt does not match this exact checkout, commit, target and configuration.'
     }
+    if ($receipt.packageProfile -cne $PackageProfile) { throw 'Validation receipt packaging profile does not match this request.' }
 
     $required = switch ($Target) {
         'win-x64' { @('HandyPlayer-*-win-x64.zip', 'HandyPlayer-*-win-x64.msi', 'SHA256SUMS-win-x64.txt', 'native-dependency.json') }
@@ -115,6 +121,7 @@ try {
             $candidate.configuration -ne 'Release' -or $candidate.status -ne 'candidate') {
             throw 'Candidate manifest does not match the validated source, target and configuration.'
         }
+        if ($candidate.packageProfile -cne $PackageProfile) { throw 'Candidate manifest packaging profile does not match this request.' }
         $uploadFiles = @($candidate.artifacts | ForEach-Object {
             $filePath = [IO.Path]::GetFullPath((Join-Path $root $_.path))
             $fileName = [IO.Path]::GetFileName($filePath)
@@ -137,9 +144,13 @@ try {
                 throw "Candidate manifest must contain exactly one required artifact: $pattern"
             }
         }
+        if ($Target -eq 'win-x64' -and $PackageProfile -eq 'Candidate' -and
+            @($uploadFiles | Where-Object { [IO.Path]::GetFileName($_.path) -like '*-win-x64-setup.exe' }).Count) {
+            throw 'Candidate packaging profile must not contain an Inno EXE.'
+        }
         . "$PSScriptRoot/Publish-Draft.ps1"
         $draft = Invoke-HandyDraftUpload -Repository 'Belgian-Coder/HandyPlayer' -SourceSha $ExpectedSha `
-            -Target $Target -Artifacts $uploadFiles -OutputDirectory $output -NativeAcceptance $candidate.nativeAcceptance
+            -Target $Target -Artifacts $uploadFiles -OutputDirectory $output -NativeAcceptance $candidate.nativeAcceptance -PackageProfile $PackageProfile
         Write-Output "Draft release: $($draft.url)"
         exit 0
     }
@@ -150,10 +161,36 @@ try {
     $env:HANDY_MAX_PARALLELISM = "$MaxParallelism"
     $env:HANDY_RELEASE_OUTPUT = Join-Path $output 'artifacts'
     Invoke-Gate $packaging 'package.log'
+    $packageMetadata = $null
+    if ($Target -eq 'win-x64') {
+        $marker = 'HANDY_PACKAGE_RESULT '
+        $results = @(Get-Content -LiteralPath (Join-Path $output 'package.log') | Where-Object { $_.StartsWith($marker, [StringComparison]::Ordinal) })
+        if ($results.Count -ne 1) { throw 'Publisher must emit exactly one successful packaging result.' }
+        $packageMetadata = $results[0].Substring($marker.Length) | ConvertFrom-Json
+        if ($packageMetadata.schemaVersion -ne 1 -or $packageMetadata.packageProfile -cne $PackageProfile -or
+            $packageMetadata.requiredMsi -isnot [bool] -or -not $packageMetadata.requiredMsi) {
+            throw 'Publisher result does not match the requested profile and required MSI gate.'
+        }
+        $stageKeys = @('nativeRestore', 'publish', 'portable', 'zip', 'msi', 'inno', 'checksums')
+        if (@($packageMetadata.stageSeconds.PSObject.Properties).Count -ne $stageKeys.Count) { throw 'Publisher stage timings are incomplete.' }
+        foreach ($key in $stageKeys) {
+            $value = $packageMetadata.stageSeconds.$key
+            if (($value -isnot [double] -and $value -isnot [long] -and $value -isnot [int]) -or
+                -not [double]::IsFinite([double]$value) -or $value -lt 0) { throw 'Publisher stage timings must be finite nonnegative numbers.' }
+        }
+        if (($PackageProfile -eq 'Candidate' -and ($packageMetadata.innoStatus -cne 'skipped-profile' -or $packageMetadata.stageSeconds.inno -ne 0)) -or
+            ($PackageProfile -eq 'Full' -and $packageMetadata.innoStatus -cnotin @('built', 'unavailable'))) {
+            throw 'Publisher Inno result does not match the selected packaging profile.'
+        }
+    }
     $allowed = @($required) + @(switch ($Target) {
-        'win-x64' { 'HandyPlayer-*-win-x64-setup.exe' }
+        'win-x64' { if ($PackageProfile -eq 'Full') { 'HandyPlayer-*-win-x64-setup.exe' } }
         'linux-x64' { 'HandyPlayer-*-linux-x64.AppImage' }
     })
+    if ($Target -eq 'win-x64' -and $PackageProfile -eq 'Candidate' -and
+        @(Get-ChildItem -LiteralPath $env:HANDY_RELEASE_OUTPUT -File -Filter '*-win-x64-setup.exe').Count) {
+        throw 'Candidate packaging profile must not produce an Inno EXE.'
+    }
     $files = @(Get-ChildItem -LiteralPath $env:HANDY_RELEASE_OUTPUT -File | Where-Object {
         $name = $_.Name
         @($allowed | Where-Object { $name -like $_ }).Count -gt 0
@@ -172,6 +209,7 @@ try {
     [ordered]@{
         schemaVersion = 1; project = 'HandyPlayer'; sourceSha = $ExpectedSha.ToLowerInvariant()
         target = $Target; configuration = 'Release'; status = 'candidate'; uploadPolicy = 'draft-only'
+        packageProfile = $PackageProfile; packaging = $packageMetadata
         signing = $(if ($Target -eq 'osx-arm64') { 'ad-hoc verification by publish-mac.sh; Developer ID/notarization not performed' } else { 'no code-signing claim' })
         validationReceipt = [IO.Path]::GetRelativePath($root, $receiptPath).Replace('\', '/')
         nativeAcceptance = 'not performed'; artifacts = $artifacts

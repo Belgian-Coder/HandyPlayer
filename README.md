@@ -464,6 +464,7 @@ Each platform has a publish script that produces a portable archive and an insta
 
 ```powershell
 ./publish-win.ps1
+./publish-win.ps1 -PackageProfile Candidate  # ZIP + required MSI, skip optional Inno EXE
 ```
 
 **Outputs:**

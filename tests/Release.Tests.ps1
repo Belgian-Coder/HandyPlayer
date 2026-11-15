@@ -8,6 +8,7 @@ $global:ReleaseRealGit = (Get-Command git -CommandType Application | Select-Obje
 $global:ReleaseSha = '1' * 40
 $global:ReleaseDirty = $false
 $global:ReleaseFailure = $false
+$global:ReleasePublisherProfile = $null
 $global:ReleaseGitCalls = 0
 $global:ReleaseCalls = [Collections.Generic.List[object]]::new()
 $fixture = Join-Path $root ('.harness/release-contracts/' + [Guid]::NewGuid().ToString('N'))
@@ -41,6 +42,13 @@ function global:pwsh {
         foreach ($name in @('HandyPlayer-test-win-x64.zip', 'HandyPlayer-test-win-x64.msi', 'SHA256SUMS-win-x64.txt', 'native-dependency.json')) {
             [IO.File]::WriteAllText((Join-Path $destination $name), 'mock package; not application output')
         }
+        $profileIndex = [Array]::IndexOf($args, '-PackageProfile')
+        $profile = $args[$profileIndex + 1]
+        $resultProfile = if ($global:ReleasePublisherProfile) { $global:ReleasePublisherProfile } else { $profile }
+        $metadata = @{ schemaVersion=1; packageProfile=$resultProfile; requiredMsi=$true
+            innoStatus=$(if($resultProfile -eq 'Candidate'){'skipped-profile'}else{'unavailable'})
+            stageSeconds=@{nativeRestore=0.1;publish=0.1;portable=0.1;zip=0.1;msi=0.1;inno=0;checksums=0.1} }
+        Write-Output ('HANDY_PACKAGE_RESULT ' + ($metadata | ConvertTo-Json -Compress -Depth 4))
     }
     $global:LASTEXITCODE = 0
 }
@@ -108,6 +116,32 @@ try {
     $direct = Join-Path $fixture 'direct-package'
     & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $direct | Out-Null
     Assert ($global:ReleaseCalls.Count -eq ($callCount + 2)) 'Direct package must validate once before canonical packaging.'
+
+    if ($IsWindows) {
+        $profileMismatch = Join-Path $fixture 'profile-mismatch'
+        & $adapter -Target $target -Mode validate -ExpectedSha $global:ReleaseSha -OutputDirectory $profileMismatch -PackageProfile Full | Out-Null
+        $profileCallCount = $global:ReleaseCalls.Count
+        Must-Fail { & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $profileMismatch -PackageProfile Candidate } 'Wrong validation profile accepted.' '*Validation receipt packaging profile*'
+        Assert ($global:ReleaseCalls.Count -eq $profileCallCount) 'Wrong profile invoked packaging.'
+        $legacyReceiptPath = Join-Path $profileMismatch 'validation.json'
+        $legacyReceipt = Get-Content -LiteralPath $legacyReceiptPath -Raw | ConvertFrom-Json
+        $legacyReceipt.PSObject.Properties.Remove('packageProfile')
+        $legacyReceipt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $legacyReceiptPath
+        Must-Fail { & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $profileMismatch -PackageProfile Full } 'Legacy unbound receipt accepted.' '*Validation receipt packaging profile*'
+        $candidateProfile = Join-Path $fixture 'candidate-profile'
+        & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $candidateProfile -PackageProfile Candidate | Out-Null
+        $candidateManifestPath = Join-Path $candidateProfile 'artifact-manifest.json'
+        $candidateManifest = Get-Content -LiteralPath $candidateManifestPath -Raw | ConvertFrom-Json
+        Assert ($candidateManifest.packageProfile -ceq 'Candidate' -and $candidateManifest.packaging.innoStatus -ceq 'skipped-profile') 'Candidate profile/timings were not recorded.'
+        Assert (@($candidateManifest.artifacts | Where-Object path -Like '*setup.exe').Count -eq 0) 'Candidate included an optional EXE.'
+        $candidateManifest.packageProfile = 'Full'
+        $candidateManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $candidateManifestPath
+        Must-Fail { & $adapter -Target $target -Mode upload -ExpectedSha $global:ReleaseSha -OutputDirectory $candidateProfile -PackageProfile Candidate } 'Wrong candidate manifest profile accepted.' '*Candidate manifest packaging profile*'
+        $badPublisher = Join-Path $fixture 'bad-publisher-profile'
+        $global:ReleasePublisherProfile = 'Full'
+        Must-Fail { & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $badPublisher -PackageProfile Candidate } 'Wrong publisher profile accepted.' '*Publisher result does not match*'
+        $global:ReleasePublisherProfile = $null
+    }
 
     Must-Fail { New-HandyOutputRoot (Join-Path (Split-Path $root -Parent) 'escaped-release-output') } 'Checkout escape accepted.'
     Must-Fail { New-HandyOutputRoot (Join-Path $root 'unignored-release-output') } 'Unignored output accepted.'

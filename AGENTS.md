@@ -73,6 +73,11 @@ Windows publishing uses `eng/restore-native.ps1`'s locked dependency helper;
 Verify archive/DLL hashes, PE architecture and member paths before staging.
 Reuse identical verified caches only; preserve unknown/mismatching targets and
 primary cached runtimes. Do not bypass native-media or required MSI gates.
+Shared Windows requests default to Candidate (ZIP plus required MSI); Full is
+selectable with `--parameter packageProfile=Full`. The canonical publisher still
+defaults to Full and auto-builds Inno when installed. Profiles must match across
+receipts/manifests/upload; never reuse older-SHA or wrong-profile output. Preserve
+the Full default, compression levels and all native/MSI gates when optimizing.
 For coordinated exact-source candidates, use `eng/release.ps1` and the declared
 capabilities in `eng/release-targets.json`; see `BUILDING.md`. Keep request output
 and receipts together. Upload is explicit and draft-only in the existing GitHub

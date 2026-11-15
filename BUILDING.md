@@ -84,6 +84,13 @@ Publishing keeps incremental compilation and rebuilds packaging stages. Windows
 self-contained restore for that RID/configuration in the same checkout.
 Publish builds default to two MSBuild workers and sequential project restore;
 Windows accepts `-MaxParallelism`, and Bash accepts `HANDY_MAX_PARALLELISM=1..64`.
+The Windows publisher defaults to `-PackageProfile Full`, preserving automatic
+Inno EXE creation when its compiler exists. `-PackageProfile Candidate` omits
+only that optional EXE and always requires ZIP plus MSI. The shared Windows
+request selects Candidate by default; choose Full with
+`--parameter packageProfile=Full`. Compression levels and native/MSI gates are
+unchanged. Actual stage times are logged and copied into the existing artifact
+manifest; skipped Inno time is zero, not an estimated saving.
 
 Windows publishing restores `eng/native-dependencies.json` through the same
 helper as `pwsh ./eng/restore-native.ps1`. The feature candidate explicitly pins
@@ -152,12 +159,17 @@ reuses a matching same-request validation receipt, or runs the full gate when no
 receipt exists. Prior package output and failed-run logs are never overwritten.
 The guarded `HANDY_RELEASE_OUTPUT` override is adapter plumbing; ordinary
 publish scripts continue to create unique `publish/releases/<rid>/<run>/` roots.
+The selected packaging profile is bound to validation, package and upload
+evidence. Wrong-profile or older-SHA receipts fail; use a fresh request output
+when changing profiles. Windows draft tags also include the profile so Full and
+Candidate artifacts cannot be silently mixed for the same commit.
 
 Explicit `-Mode upload` requires the same request's passing validation receipt
 and candidate manifest and verifies the files again. It uses machine-local
 `gh` authentication to create a **draft only** in the existing
 `Belgian-Coder/HandyPlayer` repository, tagged
-`ci-test-<target>-<full-commit-sha>`. Source commits must already exist in that
+`ci-test-<target>-<profile>-<full-commit-sha>` on Windows (the profile is omitted
+for other platforms). Source commits must already exist in that
 GitHub repository. Existing exact assets are reusable; mismatched assets,
 changed tags or a non-draft release fail. No asset is overwritten and no public
 release is published. The portable `draft-manifest.json` records candidate hashes

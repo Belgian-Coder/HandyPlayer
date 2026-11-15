@@ -148,10 +148,13 @@ function Invoke-HandyDraftUpload {
         [Parameter(Mandatory)][ValidateSet('win-x64', 'osx-arm64', 'linux-x64')][string]$Target,
         [Parameter(Mandatory)][ValidateNotNullOrEmpty()][object[]]$Artifacts,
         [Parameter(Mandatory)][string]$OutputDirectory,
-        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$NativeAcceptance
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$NativeAcceptance,
+        [ValidateSet('Candidate', 'Full')][string]$PackageProfile = 'Full'
     )
     $SourceSha = $SourceSha.ToLowerInvariant()
-    $tag = "ci-test-$Target-$SourceSha"
+    $PackageProfile = if ($PackageProfile -ieq 'Candidate') { 'Candidate' } else { 'Full' }
+    if ($Target -ne 'win-x64' -and $PackageProfile -ne 'Full') { throw 'Candidate packaging profile applies only to Windows.' }
+    $tag = if ($Target -eq 'win-x64') { "ci-test-$Target-$($PackageProfile.ToLowerInvariant())-$SourceSha" } else { "ci-test-$Target-$SourceSha" }
     if (-not [IO.Path]::IsPathFullyQualified($OutputDirectory)) {
         throw 'OutputDirectory must be an existing absolute request directory.'
     }
@@ -195,6 +198,10 @@ function Invoke-HandyDraftUpload {
             }
         }
     )
+    if ($Target -eq 'win-x64' -and $PackageProfile -eq 'Candidate' -and
+        @($packages | Where-Object name -Like '*-win-x64-setup.exe').Count) {
+        throw 'Candidate packaging profile must not upload an Inno EXE.'
+    }
     [Array]::Sort($packages, [Comparison[object]]{
         param($left, $right)
         [StringComparer]::Ordinal.Compare($left.name, $right.name)
@@ -225,11 +232,12 @@ function Invoke-HandyDraftUpload {
     $portable = @($packages | Select-Object name, size, sha256)
     $manifest = [ordered]@{
         schemaVersion = 1; sourceSha = $SourceSha; target = $Target
+        packageProfile = $PackageProfile
         nativeAcceptance = $NativeAcceptance; artifacts = $portable
     }
     $manifestJson = ($manifest | ConvertTo-Json -Depth 8).Replace("`r`n", "`n") + "`n"
     Write-HandyDraftText -Path $manifestPath -Text $manifestJson
-    $notes = "ci-test $Target $($SourceSha.Substring(0, 12))`n`nSource commit: $SourceSha`nTarget: $Target`nNative acceptance: $NativeAcceptance`n`nDraft testing candidate. Asset hashes and source identity are in draft-manifest.json.`n"
+    $notes = "ci-test $Target $($SourceSha.Substring(0, 12))`n`nSource commit: $SourceSha`nTarget: $Target`nPackaging profile: $PackageProfile`nNative acceptance: $NativeAcceptance`n`nDraft testing candidate. Asset hashes and source identity are in draft-manifest.json.`n"
     Write-HandyDraftText -Path $notesPath -Text $notes
     $expected = @($packages) + @([pscustomobject]@{
         name = 'draft-manifest.json'; size = [long](Get-Item -LiteralPath $manifestPath).Length
@@ -244,6 +252,7 @@ function Invoke-HandyDraftUpload {
         }
         $priorExpected = [ordered]@{
             url = [string]$prior.url; tag = $tag; sourceSha = $SourceSha; target = $Target
+            packageProfile = $PackageProfile
             artifacts = $expectedPortable
         }
         Write-HandyDraftText -Path $receiptPath -Text (($priorExpected | ConvertTo-Json -Depth 8).Replace("`r`n", "`n") + "`n")
@@ -256,7 +265,7 @@ function Invoke-HandyDraftUpload {
     $release = Get-HandyDraftRelease -Repository $Repository -Tag $tag
     if ($null -eq $release) {
         $null = Invoke-HandyDraftGh -Arguments @('release', 'create', $tag, '--repo', "github.com/$Repository",
-            '--draft', '--target', $SourceSha, '--title', "ci-test $Target $($SourceSha.Substring(0, 12))",
+            '--draft', '--target', $SourceSha, '--title', "ci-test $Target $PackageProfile $($SourceSha.Substring(0, 12))",
             '--notes-file', $notesPath)
         $release = Get-HandyDraftRelease -Repository $Repository -Tag $tag
     }
@@ -283,6 +292,7 @@ function Invoke-HandyDraftUpload {
     Assert-HandyDraftAssets -Release $release -Expected $expected -Repository $Repository -Tag $tag -OutputDirectory $outputRoot -RequireAll
     $result = [pscustomobject][ordered]@{
         url = [string]$release.html_url; tag = $tag; sourceSha = $SourceSha; target = $Target
+        packageProfile = $PackageProfile
         artifacts = $expectedPortable
     }
     Write-HandyDraftText -Path $receiptPath -Text (($result | ConvertTo-Json -Depth 8).Replace("`r`n", "`n") + "`n")

@@ -4,6 +4,8 @@
 #   pwsh ./publish-win.ps1 -RequireMsi  # fail when the MSI cannot be built
 param(
     [string]$Configuration = "Release",
+    [ValidateSet('Candidate', 'Full')]
+    [string]$PackageProfile = 'Full',
     # Release builds: treat a missing WiX toolset as an error instead of skipping the MSI.
     [switch]$RequireMsi,
     # Reuse an existing self-contained win-x64 restore in this checkout.
@@ -13,6 +15,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$PackageProfile = if ($PackageProfile -ieq 'Candidate') { 'Candidate' } else { 'Full' }
+$requiredMsi = [bool]($RequireMsi -or $PackageProfile -eq 'Candidate')
+$stageSeconds = [ordered]@{ nativeRestore = 0.0; publish = 0.0; portable = 0.0; zip = 0.0; msi = 0.0; inno = 0.0; checksums = 0.0 }
+function Complete-PackageStage([string]$Name, [Diagnostics.Stopwatch]$Timer) {
+    $Timer.Stop()
+    $stageSeconds[$Name] = $Timer.Elapsed.TotalSeconds
+    Write-Host ("  Stage {0}: {1:N3}s" -f $Name, $stageSeconds[$Name]) -ForegroundColor DarkGray
+}
 # All paths below are repo-relative; work from any current directory.
 Set-Location $PSScriptRoot
 . "$PSScriptRoot/harness-env.ps1"
@@ -37,6 +47,7 @@ $nativeReceiptPath = "$releaseRoot/native-dependency.json"
 
 # Restore the reviewed native build before publishing. Existing mismatching DLLs
 # fail without replacement; the application's media prerequisite gate stays intact.
+$stageTimer = [Diagnostics.Stopwatch]::StartNew()
 . "$PSScriptRoot/eng/Native-Dependency.ps1"
 $nativeLock = Get-Content -LiteralPath "$PSScriptRoot/eng/native-dependencies.json" -Raw | ConvertFrom-Json
 if ($nativeLock.schemaVersion -ne 1) { throw 'Unsupported native dependency lock schema.' }
@@ -44,6 +55,7 @@ $nativeArchives = if ($env:HANDY_NATIVE_ARCHIVE) { @($env:HANDY_NATIVE_ARCHIVE) 
 $nativeReceipt = Restore-HandyNativeDependency -CheckoutRoot $PSScriptRoot -Specification $nativeLock.'win-x64' `
     -ArchiveCandidates $nativeArchives -EvidencePath $nativeReceiptPath
 Write-Host "Native dependency verified: $($nativeReceipt.version) ($($nativeReceipt.sourceKind))" -ForegroundColor DarkGray
+Complete-PackageStage 'nativeRestore' $stageTimer
 
 Write-Host "Building $appName v$version for Windows x64..." -ForegroundColor Cyan
 
@@ -51,6 +63,7 @@ Write-Host "Building $appName v$version for Windows x64..." -ForegroundColor Cya
 
 # Publish self-contained. The Media.Mpv project fails this step if libmpv-2.dll is missing.
 $restoreArgs = if ($NoRestore) { @('--no-restore') } else { @() }
+$stageTimer = [Diagnostics.Stopwatch]::StartNew()
 dotnet publish src/HandyPlaylistPlayer.App `
     -c $Configuration `
     -r win-x64 `
@@ -63,14 +76,18 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed!" -ForegroundColor Red
     exit 1
 }
+Complete-PackageStage 'publish' $stageTimer
 
 # Create portable directory
+$stageTimer = [Diagnostics.Stopwatch]::StartNew()
 Copy-Item -Recurse $buildDir $portableDir
 Remove-Item -Recurse -Force $buildDir
+Complete-PackageStage 'portable' $stageTimer
 
 Write-Host "Creating archive: $zipPath" -ForegroundColor Cyan
 
 # Use .NET ZipFile directly (more reliable than Compress-Archive with locked files)
+$stageTimer = [Diagnostics.Stopwatch]::StartNew()
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory(
     (Resolve-Path $portableDir).Path,
@@ -78,6 +95,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
     [System.IO.Compression.CompressionLevel]::Optimal,
     $true  # include base directory name in zip
 )
+Complete-PackageStage 'zip' $stageTimer
 
 $zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
 Write-Host "  Archive: $zipPath ($zipSize MB)" -ForegroundColor White
@@ -85,6 +103,7 @@ Write-Host "  Archive: $zipPath ($zipSize MB)" -ForegroundColor White
 # --- MSI installer (requires WiX: dotnet tool install --global wix --version 6.0.2) ---
 $wixCmd = Get-Command wix -ErrorAction SilentlyContinue
 if ($wixCmd) {
+    $stageTimer = [Diagnostics.Stopwatch]::StartNew()
     Write-Host ""
     Write-Host "Building MSI installer: $msiPath" -ForegroundColor Cyan
 
@@ -108,8 +127,9 @@ if ($wixCmd) {
     }
     $msiSize = [math]::Round((Get-Item $msiPath).Length / 1MB, 1)
     Write-Host "  Installer: $msiPath ($msiSize MB)" -ForegroundColor White
-} elseif ($RequireMsi) {
-    Write-Host "WiX not found and -RequireMsi was given. Install with:" -ForegroundColor Red
+    Complete-PackageStage 'msi' $stageTimer
+} elseif ($requiredMsi) {
+    Write-Host "WiX not found and MSI is required (PackageProfile=$PackageProfile, RequireMsi=$RequireMsi). Install with:" -ForegroundColor Red
     Write-Host "  dotnet tool install --global wix --version 6.0.2" -ForegroundColor Red
     exit 1
 } else {
@@ -120,22 +140,31 @@ if ($wixCmd) {
 
 # --- setup.exe installer (per-user, optional; requires Inno Setup 6: winget install JRSoftware.InnoSetup) ---
 $setupPath = "$releaseRoot/$appName-$version-win-x64-setup.exe"
-$iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
-if (-not $iscc) {
-    $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
-              "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
-}
-if ($iscc) {
-    Write-Host ""
-    Write-Host "Building setup.exe installer: $setupPath" -ForegroundColor Cyan
-    & $iscc /Q "/DAppVersion=$version" "/DSourceDir=$portableDir" "/O$releaseRoot" installer-win.iss
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $setupPath)) {
-        Write-Host "Inno Setup build failed (iscc returned $LASTEXITCODE)" -ForegroundColor Red
-        exit 1
-    }
+$innoStatus = 'skipped-profile'
+if ($PackageProfile -eq 'Candidate') {
+    Write-Host "Skipping setup.exe (Candidate profile omits the optional Inno Setup installer)." -ForegroundColor Yellow
 } else {
-    Write-Host ""
-    Write-Host "Skipping setup.exe (Inno Setup not found)." -ForegroundColor Yellow
+    $innoStatus = 'unavailable'
+    $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+    if (-not $iscc) {
+        $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+                  "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+    }
+    if ($iscc) {
+        $stageTimer = [Diagnostics.Stopwatch]::StartNew()
+        Write-Host ""
+        Write-Host "Building setup.exe installer: $setupPath" -ForegroundColor Cyan
+        & $iscc /Q "/DAppVersion=$version" "/DSourceDir=$portableDir" "/O$releaseRoot" installer-win.iss
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $setupPath)) {
+            Write-Host "Inno Setup build failed (iscc returned $LASTEXITCODE)" -ForegroundColor Red
+            exit 1
+        }
+        $innoStatus = 'built'
+        Complete-PackageStage 'inno' $stageTimer
+    } else {
+        Write-Host ""
+        Write-Host "Skipping setup.exe (Inno Setup not found)." -ForegroundColor Yellow
+    }
 }
 
 Write-Host ""
@@ -147,16 +176,25 @@ if (Test-Path $msiPath) {
 }
 
 # SHA-256 checksums for everything shipped, next to the artifacts.
+$stageTimer = [Diagnostics.Stopwatch]::StartNew()
 $artifacts = @(Get-Item $zipPath, $nativeReceiptPath) + @(Get-Item $msiPath, $setupPath -ErrorAction SilentlyContinue)
 $artifacts | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name } |
     Set-Content "$releaseRoot/SHA256SUMS-win-x64.txt" -Encoding ascii
 Write-Host "  Checksums: $releaseRoot/SHA256SUMS-win-x64.txt" -ForegroundColor White
+Complete-PackageStage 'checksums' $stageTimer
 
 Write-Host ""
 Write-Host "Portable:  Extract the zip and run $appName.exe" -ForegroundColor Yellow
 if (Test-Path $msiPath) {
     Write-Host "Installer: Run the .msi to install to Program Files" -ForegroundColor Yellow
 }
+Write-Output ('HANDY_PACKAGE_RESULT ' + ([ordered]@{
+    schemaVersion = 1
+    packageProfile = $PackageProfile
+    requiredMsi = $requiredMsi
+    innoStatus = $innoStatus
+    stageSeconds = $stageSeconds
+} | ConvertTo-Json -Depth 3 -Compress))
 } finally {
     Write-Host "Cleanup checkpoint: prior releases/caches retained; failed-run evidence retained on errors. Output: $releaseRoot"
 }
