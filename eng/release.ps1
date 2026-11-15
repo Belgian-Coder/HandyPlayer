@@ -73,9 +73,26 @@ function Get-CanonicalNativeFile([string]$Path) {
     throw "Native dependency link chain is too deep: $Path"
 }
 
+function Assert-ReleaseNativeLoaderOverrides([string]$ReleaseTarget) {
+    $names = switch -Regex ($ReleaseTarget) {
+        '^osx-' { @('DYLD_LIBRARY_PATH', 'DYLD_FALLBACK_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES',
+            'DYLD_FRAMEWORK_PATH', 'DYLD_FALLBACK_FRAMEWORK_PATH', 'DYLD_ROOT_PATH',
+            'DYLD_VERSIONED_LIBRARY_PATH', 'DYLD_VERSIONED_FRAMEWORK_PATH', 'DYLD_IMAGE_SUFFIX'); break }
+        '^linux-' { @('LD_LIBRARY_PATH', 'LD_PRELOAD'); break }
+        default { @() }
+    }
+    foreach ($name in $names) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if ($null -ne $value -and $value.Length -gt 0) {
+            throw "Release adapter rejects nonempty $name because it can override native-library resolution; unset it in the invoking process or rerun in an isolated child process with it unset."
+        }
+    }
+}
+
 function Get-ReleaseEnvironmentIdentity {
     param([string]$RepositoryRoot, [string]$ReleaseTarget)
 
+    Assert-ReleaseNativeLoaderOverrides $ReleaseTarget
     $dotnet = Get-Command dotnet -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $dotnet) { throw 'The resolved .NET SDK is unavailable; install the repository-pinned SDK before validation or receipt reuse.' }
     $sdkOutput = @(& $dotnet.Source --version 2>&1)
@@ -85,7 +102,7 @@ function Get-ReleaseEnvironmentIdentity {
         throw "Could not resolve one .NET SDK version using '$($dotnet.Source) --version'."
     }
 
-    $dependencyIdentity = $null
+    $packagingNativeInput = $null
     if ($ReleaseTarget -eq 'win-x64') {
         $lockPath = Join-Path $RepositoryRoot 'eng/native-dependencies.json'
         $lockItem = Get-Item -LiteralPath $lockPath -Force -ErrorAction Stop
@@ -108,7 +125,7 @@ function Get-ReleaseEnvironmentIdentity {
         if ($nativeSha256 -ne $spec.dllSha256.ToLowerInvariant() -or $nativeItem.Length -ne [long]$spec.dllBytes) {
             throw 'Windows native libmpv file does not match the reviewed eng/native-dependencies.json pin.'
         }
-        $dependencyIdentity = [ordered]@{
+        $packagingNativeInput = [ordered]@{
             kind = 'reviewed-repository-pin'; name = [string]$spec.name; version = [string]$spec.version
             source = 'eng/native-dependencies.json'; path = $spec.destination
             bytes = [long]$nativeItem.Length; sha256 = $nativeSha256; lockFileSha256 = $lockSha256
@@ -150,7 +167,7 @@ function Get-ReleaseEnvironmentIdentity {
         $nativeItem = Get-CanonicalNativeFile $nativePath
         $resolvedPath = $nativeItem.FullName
         $nativeSha256 = (Get-FileHash -LiteralPath $resolvedPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        $dependencyIdentity = [ordered]@{
+        $packagingNativeInput = [ordered]@{
             kind = $nativeSource; name = 'libmpv'; version = $null; source = $nativeSource
             path = $resolvedPath; bytes = [long]$nativeItem.Length; sha256 = $nativeSha256; lockFileSha256 = $null
         }
@@ -183,51 +200,59 @@ function Get-ReleaseEnvironmentIdentity {
         $nativeItem = Get-CanonicalNativeFile $nativePath
         $resolvedPath = $nativeItem.FullName
         $nativeSha256 = (Get-FileHash -LiteralPath $resolvedPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        $dependencyIdentity = [ordered]@{
+        $packagingNativeInput = [ordered]@{
             kind = $nativeSource; name = 'libmpv'; version = $null; source = $nativeSource
             path = $resolvedPath; bytes = [long]$nativeItem.Length; sha256 = $nativeSha256; lockFileSha256 = $null
         }
     }
 
     [ordered]@{
+        schemaVersion = 2
         hostName = [Environment]::MachineName
         nativeOS = $nativePlatform
         nativeArchitecture = $nativeArchitecture
         processArchitecture = $processArchitecture
         dotnetSdkVersion = $sdkLines[0]
-        nativeDependency = $dependencyIdentity
+        validationRuntime = 'offline-unit-headless-ui'
+        nativeMedia = 'not-exercised'
+        packagingNativeInput = $packagingNativeInput
     }
 }
 
 function Get-ReleaseEnvironmentFingerprint([object]$Identity) {
-    if ($null -eq $Identity -or $null -eq $Identity.nativeDependency) { return $null }
-    $dependency = $Identity.nativeDependency
+    if ($null -eq $Identity -or $Identity.schemaVersion -ne 2 -or
+        $Identity.validationRuntime -cne 'offline-unit-headless-ui' -or $Identity.nativeMedia -cne 'not-exercised' -or
+        $null -eq $Identity.packagingNativeInput) { return $null }
+    $nativeInput = $Identity.packagingNativeInput
     foreach ($field in @('hostName', 'nativeOS', 'nativeArchitecture', 'processArchitecture', 'dotnetSdkVersion')) {
         if ($null -eq $Identity.$field -or [string]::IsNullOrWhiteSpace([string]$Identity.$field)) { return $null }
     }
     foreach ($field in @('kind', 'name', 'source', 'path', 'sha256')) {
-        if ($null -eq $dependency.$field -or [string]::IsNullOrWhiteSpace([string]$dependency.$field)) { return $null }
+        if ($null -eq $nativeInput.$field -or [string]::IsNullOrWhiteSpace([string]$nativeInput.$field)) { return $null }
     }
     $dependencyFields = @('kind', 'name', 'version', 'source', 'path', 'bytes', 'sha256', 'lockFileSha256')
     foreach ($field in $dependencyFields) {
-        $hasField = if ($dependency -is [Collections.IDictionary]) { $dependency.Contains($field) } else { $null -ne $dependency.PSObject.Properties[$field] }
+        $hasField = if ($nativeInput -is [Collections.IDictionary]) { $nativeInput.Contains($field) } else { $null -ne $nativeInput.PSObject.Properties[$field] }
         if (-not $hasField) { return $null }
     }
-    if ([long]$dependency.bytes -le 0) { return $null }
-    if ([string]$dependency.sha256 -notmatch '^[0-9a-fA-F]{64}$' -or
-        ($null -ne $dependency.lockFileSha256 -and [string]$dependency.lockFileSha256 -notmatch '^[0-9a-fA-F]{64}$')) { return $null }
+    if ([long]$nativeInput.bytes -le 0) { return $null }
+    if ([string]$nativeInput.sha256 -notmatch '^[0-9a-fA-F]{64}$' -or
+        ($null -ne $nativeInput.lockFileSha256 -and [string]$nativeInput.lockFileSha256 -notmatch '^[0-9a-fA-F]{64}$')) { return $null }
     [ordered]@{
+        schemaVersion = [int]$Identity.schemaVersion
         hostName = [string]$Identity.hostName
         nativeOS = [string]$Identity.nativeOS
         nativeArchitecture = [string]$Identity.nativeArchitecture
         processArchitecture = [string]$Identity.processArchitecture
         dotnetSdkVersion = [string]$Identity.dotnetSdkVersion
-        nativeDependency = [ordered]@{
-            kind = [string]$dependency.kind; name = [string]$dependency.name
-            version = if ($null -eq $dependency.version) { $null } else { [string]$dependency.version }
-            source = [string]$dependency.source; path = [string]$dependency.path
-            bytes = [long]$dependency.bytes; sha256 = ([string]$dependency.sha256).ToLowerInvariant()
-            lockFileSha256 = if ($null -eq $dependency.lockFileSha256) { $null } else { ([string]$dependency.lockFileSha256).ToLowerInvariant() }
+        validationRuntime = [string]$Identity.validationRuntime
+        nativeMedia = [string]$Identity.nativeMedia
+        packagingNativeInput = [ordered]@{
+            kind = [string]$nativeInput.kind; name = [string]$nativeInput.name
+            version = if ($null -eq $nativeInput.version) { $null } else { [string]$nativeInput.version }
+            source = [string]$nativeInput.source; path = [string]$nativeInput.path
+            bytes = [long]$nativeInput.bytes; sha256 = ([string]$nativeInput.sha256).ToLowerInvariant()
+            lockFileSha256 = if ($null -eq $nativeInput.lockFileSha256) { $null } else { ([string]$nativeInput.lockFileSha256).ToLowerInvariant() }
         }
     } | ConvertTo-Json -Compress -Depth 6
 }

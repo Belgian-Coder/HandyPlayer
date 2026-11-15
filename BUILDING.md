@@ -177,8 +177,12 @@ a SHA/target/checkout-bound `validation.json` receipt, fresh `artifacts/` and an
 `artifact-manifest.json` containing file sizes and SHA-256 hashes. Package mode
 reuses a matching same-request validation receipt, or runs the full gate when no
 receipt exists. Prior package output and failed-run logs are never overwritten.
-Receipts also bind the native host/architecture, resolved SDK version and actual
-libmpv identity (including the reviewed Windows lockfile). Package/upload reuse
+Receipts also bind the native host/architecture, resolved SDK version and the
+publisher's libmpv input (including the reviewed Windows lockfile). Environment
+schema v2 labels validation as offline unit/headless UI with native media
+`not-exercised`; publisher input stability does not claim that those tests loaded
+that library. Unix loader overrides are refused in the invoking process.
+Package/upload reuse
 fails after an environment change or when an older receipt lacks that identity.
 Changing the worker budget alone does not invalidate passing evidence.
 The guarded `HANDY_RELEASE_OUTPUT` override is adapter plumbing; ordinary
@@ -283,7 +287,8 @@ Repeat the package comparison without rebuilding the app or changing caches:
 ./benchmarks/measure-windows-msi.ps1 -PortableDirectory <qualified-portable-folder>
 ```
 
-It retains input hashes, build/validation logs, timing/size measurements and
+It binds every variant's verified canonical file manifest to the initial exact
+file set, including additions, removals and renames. It retains input hashes, build/validation logs, timing/size measurements and
 read-only MSI payload verification under `.harness/msi-profile/<run>/`.
 For an existing package, run `eng/verify-windows-package.ps1` with absolute
 `-Msi`, `-PortableDirectory` and a fresh ignored `-OutputDirectory`. It reads MSI
@@ -292,7 +297,7 @@ tables and embedded CABs without installing or registering the application.
 Run every offline contract and the concurrent local-feed restore fixture:
 
 ```powershell
-foreach ($name in 'Harness','Pipe','Native','Publish','Release','Draft','Tools','PackageVerification','NuGetScratch') {
+foreach ($name in 'Harness','Pipe','Native','Publish','Release','ReleaseEnvironment','Draft','Tools','PackageVerification','MsiBenchmark','NuGetScratch') {
     pwsh -NoProfile -File "./tests/$name.Tests.ps1"
     if ($LASTEXITCODE) { throw "$name contracts failed" }
 }
@@ -312,3 +317,14 @@ close can be checked without a physical device or existing library. Installer
 execution remains a separate operational check in a disposable environment;
 do not install over a working app. Developer ID signing/notarization and the ten
 LiveDevice tests require their separately authorized platform/hardware gates.
+
+The later Windows candidate `fc8713b45645ae7721abed2aefbcf94825829fb4` passed its
+exact-SHA full gate in 12.85s and Candidate package in 66.84s (publish 26.82s,
+ZIP 11.38s, medium-CAB MSI 25.99s). ICE validation passed and all 273 MSI files
+matched the portable bytes. Its ordinary-console GUI smoke used fresh app data
+and a generated H.264 clip with no funscript or connection key: actual pinned
+mpv loaded, video rendered, playback paused, sought to 59.882s, resumed and
+closed with exit code zero. No Connect/device action or MSI installation occurred.
+The paused elapsed-time label refreshed only after resuming; that observed UI
+limitation is retained in the smoke evidence. Later script-only changes do not
+change this candidate's source or imply another GUI build.

@@ -41,12 +41,15 @@ $mockIdentityFunction = @'
 function Get-ReleaseEnvironmentIdentity {
     param([string]$RepositoryRoot, [string]$ReleaseTarget)
     [pscustomobject]@{
+        schemaVersion = 2
         hostName = $global:ReleaseEnvironmentHost
         nativeOS = $global:ReleaseEnvironmentOs
         nativeArchitecture = $global:ReleaseEnvironmentArchitecture
         processArchitecture = $global:ReleaseEnvironmentArchitecture
         dotnetSdkVersion = $global:ReleaseEnvironmentSdk
-        nativeDependency = [pscustomobject]@{
+        validationRuntime = 'offline-unit-headless-ui'
+        nativeMedia = 'not-exercised'
+        packagingNativeInput = [pscustomobject]@{
             kind = 'test-native-file'; name = 'libmpv'; version = 'fixture'
             source = 'test-fixture'; path = 'native/libmpv.fixture'
             bytes = 128; sha256 = $global:ReleaseEnvironmentNativeSha
@@ -214,6 +217,14 @@ try {
     $legacyEnvironmentReceipt.PSObject.Properties.Remove('environment')
     $legacyEnvironmentReceipt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $legacyEnvironmentPath
     Must-Fail { & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $legacyEnvironment } 'Receipt without a native environment identity was reused.' '*no bound native environment identity*'
+
+    $legacyEnvironmentSchema = Join-Path $fixture 'receipt-with-legacy-environment-schema'
+    & $adapter -Target $target -Mode validate -ExpectedSha $global:ReleaseSha -OutputDirectory $legacyEnvironmentSchema | Out-Null
+    $legacySchemaPath = Join-Path $legacyEnvironmentSchema 'validation.json'
+    $legacySchemaReceipt = Get-Content -LiteralPath $legacySchemaPath -Raw | ConvertFrom-Json
+    $legacySchemaReceipt.environment.schemaVersion = 1
+    $legacySchemaReceipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $legacySchemaPath
+    Must-Fail { & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $legacyEnvironmentSchema } 'Legacy environment identity schema was reused.' '*no bound native environment identity*'
 
     $changedDuringValidation = Join-Path $fixture 'environment-changed-during-validation'
     $global:ReleaseChangeEnvironmentDuringValidation = $true
