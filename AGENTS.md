@@ -31,7 +31,7 @@ LiveDevice tests require explicit hardware intent and `-IncludeLiveDevice`.
 No SDK available: use `-Plan` and PowerShell/Bash parser checks and report that
 application compilation/tests were not run; do not install dependencies.
 
-Create any agent worktree under this project's `.worktrees/` on a `feature/`
+Create any agent worktree under this project's `.wt/` on a `feature/`
 branch. Preserve unrelated work/index entries/local commits. Keep generated
 files, reports, downloads and scratch work inside this project. Existing
 entry points initialize `harness-env.ps1` / `harness-env.sh`: immutable NuGet
@@ -42,7 +42,7 @@ checkout-local. For direct dotnet commands, source the matching environment
 helper first. Never share `bin`/`obj` between checkouts or operating systems.
 
 Use native Windows for Windows UI and installer work. There is no required WSL
-workflow. If Linux work uses WSL, keep its checkout and `.worktrees` on the
+workflow. If Linux work uses WSL, keep its checkout and `.wt` on the
 distro's Linux filesystem, inside a single project root; avoid `/mnt/d` for
 build-heavy work, and do not reuse Windows native outputs or package caches.
 Do not install/reconfigure WSL or change global agent settings as project work.
@@ -57,35 +57,34 @@ release solely because a filtered local run passed. Releases use a new
 `publish/releases/<rid>/<run>/` directory; retain previous output and failed-run
 evidence. Installer/native prerequisites and signing gates remain required.
 
-After every commit and every release, perform a cleanup checkpoint before
-continuing or reporting completion. Remove only proven task-owned disposable
-scratch/fixtures and finished, clean, pushed worktrees after resolving paths
-and checking they remain inside this project. Before push retain the active
-worktree; repeat the checkpoint after push from the primary checkout. Preserve
-unknown/untracked data, user WIP, authentication material, release/audit/rollback
-evidence, warm package/HTTP/plugin/CLI caches and useful incremental `bin`/`obj`.
-Inspect ignored contents before removing a worktree; if any must be preserved,
-retain it and report the exact limit. Never use force removal, `git clean`,
-`git worktree prune`, recursive sweeps or blanket output/cache pruning. Keep the
-recovery branch. This bounded cleanup authorization does not permit unrelated
-deletion or live-device operations.
+## Development workflow
 
-## Validation proportional to risk
+Use `.wt/<task>` on a `feature/` branch for concurrent writers. Name each
+writer's owned paths and choose one integrator; read-only agents may share a
+checkout. Preserve unrelated index entries, working changes and local commits.
+Stage explicit owned paths; never use broad add, reset, stash or clean.
 
-For Codex desktop and Claude Code, choose checks by asking what meaningful
-failure they can catch and whether that benefit justifies their cost. For
-instruction/documentation-only edits, review the changed text, references and
-`git diff --check`; skip unrelated builds, tests, app launches, screenshots and
-independent reviews. Do not start WSL or install tools just to validate prose.
-For implementation changes, build/check the changed module and run affected
-tests first; broaden only for unresolved risk, integration effects or release
-criteria. Full CI and release gates remain required where the change or release
-warrants them, including safety, security, device and data-compatibility checks.
+Choose focused, valuable checks at meaningful checkpoints. Reuse successful
+results while relevant inputs, dependencies, configuration and environment match.
+Only the integrator runs combined validation once after integration; broaden
+checks for unresolved risk or release requirements. Add regression tests for
+valuable behavior, not trivial changes or tests that mirror implementation.
+Build incrementally once; do not retry with clean builds or repeat restore,
+packaging or full CI without a concrete reason. Documentation-only changes need
+text/reference review and `git diff --check`, not app launches, screenshots,
+builds or routine independent reviews.
 
-Reuse successful evidence while its relevant source, dependencies, configuration
-and environment remain unchanged. Do not automatically repeat broad validation
-after each edit or at agent Stop. Preserve useful warm caches and incremental
-outputs under the existing cleanup rules. Report what ran, what was skipped and
-any material gap. This policy takes precedence over routine unconditional local
-validation/review instructions; approval, operational safety and release gates
-remain intact.
+Do not install automatic development validation, formatting, startup, polling,
+cost-reporting or Stop hooks. Format only explicitly requested owned files while
+no other writer can race the formatter. There are no fixed story quotas, model
+lanes, review counts, time/cost reports or mandatory cleanup JSON receipts.
+Full CI is not an automatic per-commit or per-push local requirement.
+Operational approval, data compatibility, signing, safety and release gates
+remain required. Both Codex and Claude Code use the PC-managed administrator
+launch policy only for the twelve approved project roots and their `.wt`
+worktrees; do not install or declare elevation in project configuration.
+
+Preserve warm dependencies and OS/cache isolation. Remove only proven task-owned
+disposable files and clean, pushed worktrees after reviewing ignored contents
+and checking resolved paths stay in the project; retain unknown data, caches,
+evidence and recovery branches. Never force worktree removal or sweep/prune.

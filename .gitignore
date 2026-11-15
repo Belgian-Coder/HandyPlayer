@@ -85,3 +85,4 @@ src/HandyPlaylistPlayer.Media.Mpv/runtimes/*/native/*.so.*
 .worktrees/
 .harness/
 .harness-cache/
+/.wt/
