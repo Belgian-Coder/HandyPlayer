@@ -184,3 +184,38 @@ uploader is an explicit local/remote adapter action, not a new CI workflow.
 The uploader checks draft state before each asset and afterward. GitHub does not
 provide an atomic draft-only asset upload, so another actor must not publish the
 same draft while an upload is running.
+
+## Qualified candidate checkpoint (2026-11-15)
+
+These draft artifacts belong to the source revisions below. Later documentation
+commits do not change their provenance or imply another build or test run.
+Each native software gate passed 317 unit and 9 headless UI tests with zero
+build warnings or errors.
+
+| Candidate | Packaged source | Verified result |
+| --- | --- | --- |
+| Windows x64 Candidate | `2b40d193497fbed5d01b256599f6465b34d46134` | ZIP and required MSI; [draft](https://github.com/Belgian-Coder/HandyPlayer/releases/tag/untagged-d9af21a02aa4cf5fae2e). Complete request 233.95s, packaging 163.92s. |
+| Windows x64 Full | `4fcccbb6701c6a131da9597b8a67c37d543b652b` | ZIP, required MSI and Inno EXE; [draft](https://github.com/Belgian-Coder/HandyPlayer/releases/tag/untagged-a26cc65bc91044c9f68c). Complete request 397.25s, packaging 285.84s. |
+| macOS ARM64 | `83702bb1ddb742431df45f14e27b2d436483f881` | ZIP and DMG, strict ad-hoc signature checks; [draft](https://github.com/Belgian-Coder/HandyPlayer/releases/tag/untagged-342f0e28e63da3b840fb). Original validation/package request 72.08s; later upload-only resume 23.07s. |
+
+All uploaded assets, including each draft manifest, were verified by exact size
+and SHA-256. The Mac upload retained the original qualified checkout, packages
+and validation/artifact receipts. Its first upload attempt created the draft but
+stopped before assets when the immediate release-list lookup did not find it;
+the guarded resume reused that exact draft and staged bytes. Failed-attempt
+evidence remains retained. No Mac candidate was rebuilt for authentication or
+documentation changes.
+
+Windows Candidate's uploaded payload was 223,777,888 bytes versus Full's
+310,000,496 bytes, a 27.8% reduction. These requests used different commits and
+cache states; their timings are not a controlled measurement of Inno's cost.
+Hosted Windows, Ubuntu and macOS CI passed for `2b40d19` in
+[run 43753448161](https://github.com/Belgian-Coder/HandyPlayer/actions/runs/43753448161).
+PC-MARC packaging was not benchmarked because its required WiX prerequisite was
+absent; no provisioning was attempted and WINDOWS11-VM remains the default.
+
+Interactive playback, GPU, physical devices and installed Windows installer
+behavior remain unverified. The Mac candidate is ad-hoc signed; Developer ID
+signing and notarization remain unperformed. These are testing drafts, not
+public production releases. Original outputs, failed-run evidence, warm caches,
+primary checkouts and existing worktrees are retained.
