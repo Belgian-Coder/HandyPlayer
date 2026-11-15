@@ -86,3 +86,6 @@ src/HandyPlaylistPlayer.Media.Mpv/runtimes/*/native/*.so.*
 .harness/
 .harness-cache/
 /.wt/
+
+## Retrieved native release acceptance artifacts
+/artifacts/remote-acceptance/
