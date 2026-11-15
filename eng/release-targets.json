@@ -14,7 +14,7 @@
         "upload": [["pwsh", "-NoProfile", "-NonInteractive", "-File", "eng/release.ps1", "-Target", "{target}", "-Mode", "upload", "-ExpectedSha", "{commit}", "-OutputDirectory", "{output}", "-MaxParallelism", "{jobs}"]]
       },
       "artifacts": ["artifacts/HandyPlayer-*-win-x64.zip", "artifacts/HandyPlayer-*-win-x64.msi", "artifacts/HandyPlayer-*-win-x64-setup.exe", "artifacts/SHA256SUMS-win-x64.txt", "artifact-manifest.json", "draft-manifest.json", "draft-upload.json"],
-      "uploadPolicy": "existing-gates",
+      "uploadPolicy": "draft-only",
       "notes": ["Requires native .NET SDK 11.0.100 (latestFeature), PowerShell 7, libmpv-2.dll and WiX 6.0.2. Inno Setup EXE is optional.", "Canonical full validation is required before packaging; same-request SHA-bound receipt prevents duplicate validation.", "Explicit upload creates only ci-test GitHub draft candidates in Belgian-Coder/HandyPlayer using existing gh auth. Native playback/device/installer acceptance is separate."]
     },
     "osx-arm64": {
@@ -27,7 +27,7 @@
         "upload": [["pwsh", "-NoProfile", "-NonInteractive", "-File", "eng/release.ps1", "-Target", "{target}", "-Mode", "upload", "-ExpectedSha", "{commit}", "-OutputDirectory", "{output}", "-MaxParallelism", "{jobs}"]]
       },
       "artifacts": ["artifacts/HandyPlayer-*-mac-arm64.zip", "artifacts/HandyPlayer-*-mac-arm64.dmg", "artifact-manifest.json", "draft-manifest.json", "draft-upload.json"],
-      "uploadPolicy": "existing-gates",
+      "uploadPolicy": "draft-only",
       "notes": ["Requires a native ARM64 macOS host, ARM64 PowerShell 7, .NET SDK 11.0.100 (latestFeature), native libmpv/dependencies and macOS packaging tools.", "publish-mac.sh retains ad-hoc signing and strict verification. Developer ID signing, notarization and Intel Mac release acceptance are not implemented.", "PREBUILT_DIR is not used by the adapter and does not establish native validation. Draft candidates still require separate native playback/device acceptance."]
     }
   }

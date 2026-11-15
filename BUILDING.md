@@ -85,6 +85,26 @@ and native ARM64 Mac builder capabilities for the shared SSH request client.
 The existing Linux x64 entry point remains directly usable; no Linux remote
 builder is declared without a compatible configured host.
 
+The standalone `eng/request-release.py` client uses native Python 3.10+ and the
+standard library. Invoke the existing interpreter by its absolute path. For
+example, on PC-MARC:
+
+```powershell
+$python = 'C:\Users\marcp\AppData\Roaming\uv\python\cpython-3.12.11-windows-x86_64-none\python.exe'
+& $python ./eng/request-release.py --target win-x64 --mode plan --execution-context console
+& $python ./eng/request-release.py --target osx-arm64 --mode plan --execution-context console
+```
+
+Plans read the committed capability manifest without network or state changes.
+For an explicitly requested real `validate`, `package` or `upload`, retain
+`--execution-context console` so the builder's existing console user's signing
+and GitHub authentication stay local. Use `--ssh-config <existing-config>` when
+the host uses a dedicated existing SSH configuration; do not copy keys or tokens.
+The default execution context is `current`, suitable for unauthenticated static
+fixtures. Requests pin committed source and use the declared native host; they
+do not transfer uncommitted edits, dependency caches or credentials. Shared client
+changes must come from Infrastructure rather than project-specific forks.
+
 ```powershell
 $sha = git rev-parse HEAD
 $output = Join-Path $PWD ('.harness/remote-release/' + [Guid]::NewGuid().ToString('N'))
