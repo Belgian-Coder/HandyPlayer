@@ -6,6 +6,9 @@ $root = Split-Path $PSScriptRoot -Parent
 $global:HarnessCalls = [Collections.Generic.List[object]]::new()
 $global:HarnessFailureStep = $FailureStep
 function global:dotnet {
+    if ($env:DOTNET_GENERATE_ASPNET_CERTIFICATE -ne 'false') {
+        throw 'Certificate generation must be disabled before the first dotnet call.'
+    }
     $global:HarnessCalls.Add(@($args))
     $global:LASTEXITCODE = if ($args[0] -eq $global:HarnessFailureStep) { 19 } else { 0 }
 }
@@ -67,6 +70,13 @@ try {
     $common = git -C $root rev-parse --path-format=absolute --git-common-dir
     Assert ($env:NUGET_PACKAGES.StartsWith((Split-Path $common -Parent))) 'Package cache escaped primary project.'
     Assert (Test-Path $env:NUGET_PACKAGES) 'Package cache not initialized.'
+
+    $global:HarnessCalls.Clear()
+    $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = [NullString]::Value
+    $benchmarkOutput = Join-Path $root ('.harness/benchmark-contracts/' + [Guid]::NewGuid().ToString('N'))
+    & "$root/benchmarks/run-benchmarks.ps1" -Root $root -OutDir $benchmarkOutput
+    Assert ($global:HarnessCalls.Count -eq 1 -and $global:HarnessCalls[0][0] -eq 'run') 'Benchmark must use the initialized canonical CLI environment.'
+    Assert ((Get-Location).Path -eq $root) 'Benchmark must select the checkout SDK policy.'
 
     foreach ($step in @('restore', 'build', 'test')) {
         & (Join-Path $PSHOME 'pwsh') -NoProfile -NonInteractive -File $PSCommandPath -FailureStep $step

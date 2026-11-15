@@ -14,6 +14,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$Root = (Resolve-Path -LiteralPath $Root).Path
+Set-Location -LiteralPath $Root
+. (Join-Path $Root 'harness-env.ps1')
 # The libraries must be built for both net10.0 and net11.0 (see Directory.Build.props).
 # Passed as MSBuild properties (not env vars) so nothing leaks into later builds in the same shell.
 
