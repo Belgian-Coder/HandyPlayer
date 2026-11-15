@@ -9,13 +9,13 @@
       "platform": "windows",
       "architecture": "x64",
       "commands": {
-        "validate": [["pwsh", "-NoProfile", "-NonInteractive", "-File", "eng/release.ps1", "-Target", "{target}", "-Mode", "validate", "-ExpectedSha", "{commit}", "-OutputDirectory", "{output}", "-MaxParallelism", "{jobs}"]],
+        "validate": [["pwsh", "-NoProfile", "-NonInteractive", "-File", "eng/restore-native.ps1", "-EvidencePath", "{output}/native-validation.json"], ["pwsh", "-NoProfile", "-NonInteractive", "-File", "eng/release.ps1", "-Target", "{target}", "-Mode", "validate", "-ExpectedSha", "{commit}", "-OutputDirectory", "{output}", "-MaxParallelism", "{jobs}"]],
         "package": [["pwsh", "-NoProfile", "-NonInteractive", "-File", "eng/release.ps1", "-Target", "{target}", "-Mode", "package", "-ExpectedSha", "{commit}", "-OutputDirectory", "{output}", "-MaxParallelism", "{jobs}"]],
         "upload": [["pwsh", "-NoProfile", "-NonInteractive", "-File", "eng/release.ps1", "-Target", "{target}", "-Mode", "upload", "-ExpectedSha", "{commit}", "-OutputDirectory", "{output}", "-MaxParallelism", "{jobs}"]]
       },
-      "artifacts": ["artifacts/HandyPlayer-*-win-x64.zip", "artifacts/HandyPlayer-*-win-x64.msi", "artifacts/HandyPlayer-*-win-x64-setup.exe", "artifacts/SHA256SUMS-win-x64.txt", "artifact-manifest.json", "draft-manifest.json", "draft-upload.json"],
+      "artifacts": ["artifacts/HandyPlayer-*-win-x64.zip", "artifacts/HandyPlayer-*-win-x64.msi", "artifacts/HandyPlayer-*-win-x64-setup.exe", "artifacts/SHA256SUMS-win-x64.txt", "artifacts/native-dependency.json", "artifact-manifest.json", "draft-manifest.json", "draft-upload.json"],
       "uploadPolicy": "draft-only",
-      "notes": ["Requires native .NET SDK 11.0.100 (latestFeature), PowerShell 7, libmpv-2.dll and WiX 6.0.2. Inno Setup EXE is optional.", "Canonical full validation is required before packaging; same-request SHA-bound receipt prevents duplicate validation.", "Explicit upload creates only ci-test GitHub draft candidates in Belgian-Coder/HandyPlayer using existing gh auth. Native playback/device/installer acceptance is separate."]
+      "notes": ["Requires native .NET SDK 11.0.100 (latestFeature), PowerShell 7, existing 7-Zip and WiX 6.0.2. Inno Setup EXE is optional. Canonical publishing restores the explicitly locked non-v3 libmpv build with archive/DLL hashes and PE x64 verification; unknown existing DLLs fail without replacement.", "Canonical full validation is required before packaging; same-request SHA-bound receipt prevents duplicate validation.", "Explicit upload creates only ci-test GitHub draft candidates in Belgian-Coder/HandyPlayer using existing gh auth. Native playback/device/installer acceptance is separate."]
     },
     "osx-arm64": {
       "host": "macbook-pro",

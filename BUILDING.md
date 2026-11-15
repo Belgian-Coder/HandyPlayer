@@ -73,7 +73,7 @@ existing entry point. No script uploads a production release.
 
 | Platform | Command | Native requirements and outputs |
 | --- | --- | --- |
-| Windows x64 | `pwsh ./publish-win.ps1 -RequireMsi` | libmpv; WiX 6.0.2 for required MSI. ZIP, MSI, optional Inno Setup EXE, SHA-256 manifest. |
+| Windows x64 | `pwsh ./publish-win.ps1 -RequireMsi` | Existing 7-Zip; locked libmpv restore; WiX 6.0.2 for required MSI. ZIP, MSI, optional Inno Setup EXE, native dependency receipt and SHA-256 manifest. |
 | macOS ARM64 | `bash ./publish-mac.sh` | macOS tools, libmpv and dependencies; existing ad-hoc signing and strict verification. `.app`, ZIP and DMG. |
 | Linux x64 | `bash ./publish-linux.sh` | Linux/native package tools; tar.gz, DEB and optional AppImage. |
 
@@ -84,6 +84,23 @@ Publishing keeps incremental compilation and rebuilds packaging stages. Windows
 self-contained restore for that RID/configuration in the same checkout.
 Publish builds default to two MSBuild workers and sequential project restore;
 Windows accepts `-MaxParallelism`, and Bash accepts `HANDY_MAX_PARALLELISM=1..64`.
+
+Windows publishing restores `eng/native-dependencies.json` through the same
+helper as `pwsh ./eng/restore-native.ps1`. The feature candidate explicitly pins
+SourceForge's non-v3 `20261108-git-55d3feb45c` archive, published archive SHA-256
+and extracted DLL SHA-256/size/PE x64 header (`mpv v0.42.0-5-g55d3feb45`). This is
+a reviewed native baseline
+change from the VM's earlier unreceipted `v0.41.0-252-gc401ef9c3` cache; primary
+cached bytes are preserved. It does not establish interactive playback acceptance.
+Restore verifies archive members, refuses links/traversal and mismatched existing
+targets, retains failed evidence and reuses only verified warm archives. A supplied
+`HANDY_NATIVE_ARCHIVE` (or standalone `-ArchivePath`) is read-only input verified
+against the same pin. `native-dependency.json` ships alongside candidate artifacts
+and participates in their checksum manifest; no extraction or installer tool is
+installed globally by the restore.
+The shared Windows request restores the locked DLL before its full software gate,
+then publishing verifies the same bytes again before packaging. This keeps the
+test/build outputs aligned with the selected native candidate.
 
 macOS `PREBUILT_DIR` supplies input for packaging; it is not native validation.
 The Mac script supports `osx-arm64` and ad-hoc signatures. It does not implement

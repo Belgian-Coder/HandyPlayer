@@ -33,6 +33,17 @@ $zipName = "$appName-$version-win-x64.zip"
 $zipPath = "$releaseRoot/$zipName"
 $msiName = "$appName-$version-win-x64.msi"
 $msiPath = "$releaseRoot/$msiName"
+$nativeReceiptPath = "$releaseRoot/native-dependency.json"
+
+# Restore the reviewed native build before publishing. Existing mismatching DLLs
+# fail without replacement; the application's media prerequisite gate stays intact.
+. "$PSScriptRoot/eng/Native-Dependency.ps1"
+$nativeLock = Get-Content -LiteralPath "$PSScriptRoot/eng/native-dependencies.json" -Raw | ConvertFrom-Json
+if ($nativeLock.schemaVersion -ne 1) { throw 'Unsupported native dependency lock schema.' }
+$nativeArchives = if ($env:HANDY_NATIVE_ARCHIVE) { @($env:HANDY_NATIVE_ARCHIVE) } else { @() }
+$nativeReceipt = Restore-HandyNativeDependency -CheckoutRoot $PSScriptRoot -Specification $nativeLock.'win-x64' `
+    -ArchiveCandidates $nativeArchives -EvidencePath $nativeReceiptPath
+Write-Host "Native dependency verified: $($nativeReceipt.version) ($($nativeReceipt.sourceKind))" -ForegroundColor DarkGray
 
 Write-Host "Building $appName v$version for Windows x64..." -ForegroundColor Cyan
 
@@ -136,7 +147,7 @@ if (Test-Path $msiPath) {
 }
 
 # SHA-256 checksums for everything shipped, next to the artifacts.
-$artifacts = @(Get-Item $zipPath) + @(Get-Item $msiPath, $setupPath -ErrorAction SilentlyContinue)
+$artifacts = @(Get-Item $zipPath, $nativeReceiptPath) + @(Get-Item $msiPath, $setupPath -ErrorAction SilentlyContinue)
 $artifacts | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name } |
     Set-Content "$releaseRoot/SHA256SUMS-win-x64.txt" -Encoding ascii
 Write-Host "  Checksums: $releaseRoot/SHA256SUMS-win-x64.txt" -ForegroundColor White

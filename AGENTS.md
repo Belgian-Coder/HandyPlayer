@@ -68,6 +68,11 @@ failures and signature verification still apply. Do not publish/distribute a
 release solely because a filtered local run passed. Releases use a new
 `publish/releases/<rid>/<run>/` directory; retain previous output and failed-run
 evidence. Installer/native prerequisites and signing gates remain required.
+Windows publishing uses `eng/restore-native.ps1`'s locked dependency helper;
+`eng/native-dependencies.json` records the explicit feature candidate baseline.
+Verify archive/DLL hashes, PE architecture and member paths before staging.
+Reuse identical verified caches only; preserve unknown/mismatching targets and
+primary cached runtimes. Do not bypass native-media or required MSI gates.
 For coordinated exact-source candidates, use `eng/release.ps1` and the declared
 capabilities in `eng/release-targets.json`; see `BUILDING.md`. Keep request output
 and receipts together. Upload is explicit and draft-only in the existing GitHub

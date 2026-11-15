@@ -330,16 +330,22 @@ If you want to use the Intiface/Buttplug backend instead of the direct Handy API
 
 #### Windows
 
-Download `libmpv-2.dll` and place it in the project:
+Restore the reviewed Windows x64 libmpv build with existing PowerShell 7 and 7-Zip:
 
 ```powershell
-# Download from https://sourceforge.net/projects/mpv-player-windows/files/libmpv/
-# Extract and copy the DLL into the project:
-mkdir -p src/HandyPlaylistPlayer.Media.Mpv/runtimes/win-x64/native
-cp libmpv-2.dll src/HandyPlaylistPlayer.Media.Mpv/runtimes/win-x64/native/
+pwsh ./eng/restore-native.ps1 -Plan
+pwsh ./eng/restore-native.ps1
+# Optional verified local archive instead of downloading:
+pwsh ./eng/restore-native.ps1 -ArchivePath <existing-archive.7z>
 ```
 
 > **Tip:** Pre-built releases include libmpv already — this step is only needed for development builds.
+
+`eng/native-dependencies.json` pins the non-v3 SourceForge archive, its published
+SHA-256, and the extracted DLL's hash, size and PE x64 architecture. Publishing
+runs this same restore. Matching archives remain warm under the checkout's
+`.harness/native/`; unknown or different existing DLLs fail without replacement.
+Use an isolated worktree to evaluate a new pin while preserving an existing runtime.
 
 #### macOS
 

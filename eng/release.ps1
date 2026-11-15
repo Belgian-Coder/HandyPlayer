@@ -104,7 +104,7 @@ try {
     }
 
     $required = switch ($Target) {
-        'win-x64' { @('HandyPlayer-*-win-x64.zip', 'HandyPlayer-*-win-x64.msi', 'SHA256SUMS-win-x64.txt') }
+        'win-x64' { @('HandyPlayer-*-win-x64.zip', 'HandyPlayer-*-win-x64.msi', 'SHA256SUMS-win-x64.txt', 'native-dependency.json') }
         'osx-arm64' { @('HandyPlayer-*-mac-arm64.zip', 'HandyPlayer-*-mac-arm64.dmg') }
         'linux-x64' { @('HandyPlayer-*-linux-x64.tar.gz', 'handyplayer-*-linux-x64.deb') }
     }

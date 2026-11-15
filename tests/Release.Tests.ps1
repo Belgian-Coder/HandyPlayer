@@ -38,7 +38,7 @@ function global:pwsh {
     if ($global:ReleaseFailure) { $global:LASTEXITCODE = 19; return }
     if ($args -contains './publish-win.ps1') {
         $destination = New-HandyOutputRoot $env:HANDY_RELEASE_OUTPUT
-        foreach ($name in @('HandyPlayer-test-win-x64.zip', 'HandyPlayer-test-win-x64.msi', 'SHA256SUMS-win-x64.txt')) {
+        foreach ($name in @('HandyPlayer-test-win-x64.zip', 'HandyPlayer-test-win-x64.msi', 'SHA256SUMS-win-x64.txt', 'native-dependency.json')) {
             [IO.File]::WriteAllText((Join-Path $destination $name), 'mock package; not application output')
         }
     }
