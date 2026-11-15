@@ -28,6 +28,11 @@ filters use xUnit MTP syntax, not VSTest `--filter`. Empty selections fail via
 MTP's minimum-test count gate. The unit project references the App, so its build
 still includes Avalonia and all referenced libraries.
 LiveDevice tests require explicit hardware intent and `-IncludeLiveDevice`.
+Validation defaults to two MSBuild workers and two concurrent test modules;
+`-MaxParallelism 1` reduces either limit on a busy host. Restore processes
+projects sequentially. This does not limit xUnit test-case threads or coordinate
+other invocations: run one writer/build per checkout and budget host-wide work
+before starting another project. See `BUILDING.md` for native host boundaries.
 No SDK available: use `-Plan` and PowerShell/Bash parser checks and report that
 application compilation/tests were not run; do not install dependencies.
 
