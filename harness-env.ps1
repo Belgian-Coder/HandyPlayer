@@ -19,6 +19,87 @@ foreach ($directory in @($env:NUGET_PACKAGES, $env:DOTNET_CLI_HOME,
     [IO.Directory]::CreateDirectory($directory) | Out-Null
 }
 
+function Get-HandyPipeDirectory([string]$CheckoutRoot, [string]$PrimaryRoot, [string]$Platform, [string]$Architecture) {
+    # MTP appends MONITORTOHOST_<32 hex digits>; macOS permits 103 UTF-8 bytes.
+    $local = "$CheckoutRoot/.harness/tmp"
+    if ([Text.Encoding]::UTF8.GetByteCount($local) + 47 -le 103) {
+        return [pscustomobject]@{ Path = $local; Fingerprint = $null }
+    }
+    $identity = [Text.Encoding]::UTF8.GetBytes("$CheckoutRoot|$Platform|$Architecture")
+    $fingerprint = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($identity)).ToLowerInvariant()
+    $short = "$PrimaryRoot/.harness/i/$($fingerprint.Substring(0, 8))"
+    if ([Text.Encoding]::UTF8.GetByteCount($short) + 47 -gt 103) {
+        throw 'Project root is too long for Unix test sockets; use a shorter native project root.'
+    }
+    return [pscustomobject]@{ Path = $short; Fingerprint = $fingerprint }
+}
+
+function Get-HandyPipeProjectRoot([string]$CheckoutRoot, [string]$DefaultRoot, [string]$Hint) {
+    if (-not $Hint) { return $DefaultRoot }
+    if (-not [IO.Path]::IsPathFullyQualified($Hint)) { throw 'Build project root hint must be an absolute owned Git root.' }
+    $hintRoot = [IO.Path]::GetFullPath($Hint).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    if (-not $CheckoutRoot.StartsWith(($hintRoot + [IO.Path]::DirectorySeparatorChar), $comparison) -and $CheckoutRoot -ne $hintRoot) {
+        throw 'Build project root hint must contain this checkout.'
+    }
+    $marker = Join-Path $hintRoot '.request-release-owner.json'
+    $item = Get-Item -LiteralPath $marker -Force -ErrorAction Stop
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Build project owner marker must not be a link.' }
+    $owner = [IO.File]::ReadAllText($marker) | ConvertFrom-Json
+    if (@($owner.PSObject.Properties).Count -ne 3 -or $owner.owner -cne 'request-release' -or
+        $owner.version -ne 1 -or $owner.project -cne 'HandyPlayer') { throw 'Build project root hint is not owned by this project.' }
+    $top = & git -C $hintRoot rev-parse --show-toplevel
+    if ($LASTEXITCODE -ne 0 -or [IO.Path]::GetFullPath($top) -ne $hintRoot) { throw 'Build project root hint is not the exact Git project root.' }
+    $hintOrigin = & git -C $hintRoot config --get remote.origin.url
+    $checkoutOrigin = & git -C $CheckoutRoot config --get remote.origin.url
+    if (-not $hintOrigin -or $hintOrigin -cne $checkoutOrigin) { throw 'Build project root hint must have the same canonical origin as this checkout.' }
+    return $hintRoot
+}
+
+function Initialize-HandyPipeDirectory($Selection) {
+    $directoryExisted = Test-Path -LiteralPath $Selection.Path
+    $cursor = [IO.Path]::GetFullPath($Selection.Path)
+    while ($cursor) {
+        $item = Get-Item -LiteralPath $cursor -Force -ErrorAction SilentlyContinue
+        if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw "Test sockets must not use a link/junction: $cursor" }
+        $parent = [IO.Directory]::GetParent($cursor)
+        $cursor = if ($parent) { $parent.FullName } else { $null }
+    }
+    [IO.Directory]::CreateDirectory($Selection.Path) | Out-Null
+    if ($Selection.Fingerprint) {
+        $marker = Join-Path $Selection.Path '.owner'
+        $existing = Get-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
+        if ($existing) {
+            if (($existing.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+                [IO.File]::ReadAllText($marker) -cne $Selection.Fingerprint) {
+                throw 'Test socket namespace belongs to another checkout/platform/architecture; preserved.'
+            }
+        } else {
+            if ($directoryExisted) { throw 'Unknown existing test socket namespace has no owner marker; preserved.' }
+            $stream = [IO.File]::Open($marker, 'CreateNew', 'Write', 'None')
+            try {
+                $bytes = [Text.Encoding]::ASCII.GetBytes($Selection.Fingerprint)
+                $stream.Write($bytes, 0, $bytes.Length)
+            } finally { $stream.Dispose() }
+        }
+    }
+    return $Selection.Path
+}
+
+if (-not $IsWindows) {
+    $pipeProjectRoot = Get-HandyPipeProjectRoot $PSScriptRoot $primaryRoot $env:BUILD_RELEASE_PROJECT_ROOT
+    $pipeSelection = Get-HandyPipeDirectory $PSScriptRoot $pipeProjectRoot $platform $architecture
+    if ($env:TESTINGPLATFORM_PIPE_DIRECTORY -and $env:TESTINGPLATFORM_PIPE_DIRECTORY -cne $pipeSelection.Path) {
+        $explicit = [IO.Path]::GetFullPath($env:TESTINGPLATFORM_PIPE_DIRECTORY)
+        if (-not $explicit.StartsWith(($PSScriptRoot + '/'), [StringComparison]::Ordinal)) {
+            throw 'Explicit test pipe directory must be checkout-local or match the owned fallback.'
+        }
+        if ([Text.Encoding]::UTF8.GetByteCount($explicit) + 47 -gt 103) { throw 'Explicit test pipe directory exceeds the Unix socket byte limit.' }
+        $pipeSelection = [pscustomobject]@{ Path = $explicit; Fingerprint = $null }
+    }
+    $env:TESTINGPLATFORM_PIPE_DIRECTORY = Initialize-HandyPipeDirectory $pipeSelection
+}
+
 function New-HandyOutputRoot([string]$OutputDirectory, [switch]$AllowExisting) {
     if (-not [IO.Path]::IsPathFullyQualified($OutputDirectory)) {
         throw 'Output directory must be an absolute path inside this checkout.'

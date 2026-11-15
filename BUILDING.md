@@ -53,6 +53,18 @@ with current build output. Source `harness-env.ps1` or, from the repository root
 under the primary checkout's `.harness-cache/<os>-<arch>/packages`; CLI home,
 HTTP/plugin caches and temporary files stay under each checkout's `.harness/`.
 Do not share generated output or writable caches between hosts or architectures.
+MTP's Unix socket paths have a 103-byte UTF-8 limit. For long checkout paths,
+the helpers set `TESTINGPLATFORM_PIPE_DIRECTORY` to a short socket-only directory
+under the primary project's `.harness/i/`. Its fingerprint includes checkout,
+OS and architecture; a full owner marker rejects namespace collisions. Other
+temporary files and mutable caches remain checkout-local. If even the primary
+project path is too long, use a shorter native project root rather than bypass
+the test gate.
+For independent remote clones, the shared executor supplies the outer project as
+`BUILD_RELEASE_PROJECT_ROOT`. Helpers verify its exact Git root, ownership marker
+and matching canonical origin before using its shorter socket namespace. An
+explicit pipe directory is preserved when checkout-local (or the matching owned
+fallback) and within the byte limit; invalid paths fail rather than being replaced.
 
 ## Package locally
 

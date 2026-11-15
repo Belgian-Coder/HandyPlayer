@@ -45,6 +45,13 @@ CLI home, HTTP/plugin caches and temporary files use each checkout's ignored
 `.harness/`. `bin`, `obj`, `TestResults`, UI screenshots and `publish` remain
 checkout-local. For direct dotnet commands, source the matching environment
 helper first. Never share `bin`/`obj` between checkouts or operating systems.
+On Unix, long checkout paths use a socket-only fallback under the primary
+project's `.harness/i/<fingerprint>/`, selected by `TESTINGPLATFORM_PIPE_DIRECTORY`.
+Each checkout/OS/architecture has a separate namespace and full owner marker;
+collisions or paths exceeding MTP's 103-byte limit fail without sharing state.
+Independent release clones use the executor's `BUILD_RELEASE_PROJECT_ROOT` hint
+only after checking its Git root, HandyPlayer ownership marker and matching origin.
+Explicit pipe directories are retained when safe; invalid ones fail clearly.
 
 Use native Windows for Windows UI and installer work. There is no required WSL
 workflow. If Linux work uses WSL, keep its checkout and `.wt` on the
