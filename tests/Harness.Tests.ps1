@@ -70,6 +70,9 @@ try {
     $common = git -C $root rev-parse --path-format=absolute --git-common-dir
     Assert ($env:NUGET_PACKAGES.StartsWith((Split-Path $common -Parent))) 'Package cache escaped primary project.'
     Assert (Test-Path $env:NUGET_PACKAGES) 'Package cache not initialized.'
+    Assert ($env:NUGET_SCRATCH -eq (Join-Path (Split-Path $env:NUGET_PACKAGES -Parent) 'scratch')) 'NuGet locks must share the package cache scope.'
+    Assert (Test-Path $env:NUGET_SCRATCH) 'Shared NuGet lock directory not initialized.'
+    Assert ($env:NUGET_SCRATCH -ne $env:TEMP) 'NuGet coordination locks must not use checkout-local TEMP.'
 
     $global:HarnessCalls.Clear()
     $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = [NullString]::Value

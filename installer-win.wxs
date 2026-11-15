@@ -5,6 +5,10 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
+  <?ifndef CabCompression ?>
+    <?define CabCompression = "high" ?>
+  <?endif ?>
+
   <Package Name="HandyPlayer"
            Manufacturer="HandyPlayer"
            Version="$(var.Version)"
@@ -14,7 +18,7 @@
            Compressed="yes">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of HandyPlayer is already installed." />
-    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="$(var.CabCompression)" />
 
     <!-- App icon in Add/Remove Programs -->
     <Icon Id="AppIcon" SourceFile="src\HandyPlaylistPlayer.App\Assets\app-icon.ico" />

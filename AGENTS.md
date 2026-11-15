@@ -41,7 +41,9 @@ branch. Preserve unrelated work/index entries/local commits. Keep generated
 files, reports, downloads and scratch work inside this project. Existing
 entry points initialize `harness-env.ps1` / `harness-env.sh`: immutable NuGet
 packages share the primary checkout's `.harness-cache/<os>-<arch>/packages`;
-CLI home, HTTP/plugin caches and temporary files use each checkout's ignored
+NuGet coordination locks share its sibling `scratch/` through `NUGET_SCRATCH`.
+All consumers of shared packages must use those same locks. CLI home,
+HTTP/plugin caches and other temporary files use each checkout's ignored
 `.harness/`. `bin`, `obj`, `TestResults`, UI screenshots and `publish` remain
 checkout-local. For direct dotnet commands, source the matching environment
 helper first. Never share `bin`/`obj` between checkouts or operating systems.
@@ -69,6 +71,10 @@ release solely because a filtered local run passed. Releases use a new
 `publish/releases/<rid>/<run>/` directory; retain previous output and failed-run
 evidence. Installer/native prerequisites and signing gates remain required.
 Windows publishing uses `eng/restore-native.ps1`'s locked dependency helper;
+explicit `eng/restore-tools.ps1` restores pinned WiX 6.0.2 only into this
+checkout's ignored tools directory. The publisher prefers that tool and isolates
+its extension cache and PATH changes to the current process. Preserve existing
+global tools; never install a machine-wide tool as a build side effect.
 `eng/native-dependencies.json` records the explicit feature candidate baseline.
 Verify archive/DLL hashes, PE architecture and member paths before staging.
 Reuse identical verified caches only; preserve unknown/mismatching targets and
@@ -77,7 +83,9 @@ Shared Windows requests default to Candidate (ZIP plus required MSI); Full is
 selectable with `--parameter packageProfile=Full`. The canonical publisher still
 defaults to Full and auto-builds Inno when installed. Profiles must match across
 receipts/manifests/upload; never reuse older-SHA or wrong-profile output. Preserve
-the Full default, compression levels and all native/MSI gates when optimizing.
+the Full default/high CAB compression, ZIP compression and all native/MSI gates.
+Candidate uses measured medium CAB compression; the installer payload and
+required MSI checks stay identical. See `BUILDING.md` for the size/time tradeoff.
 For coordinated exact-source candidates, use `eng/release.ps1` and the declared
 capabilities in `eng/release-targets.json`; see `BUILDING.md`. Keep request output
 and receipts together. Upload is explicit and draft-only in the existing GitHub

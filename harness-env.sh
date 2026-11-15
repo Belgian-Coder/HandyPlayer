@@ -1,5 +1,5 @@
 # Source from the repository root, after the caller has changed directory there.
-# Match harness-env.ps1: share packages by host OS/architecture, isolate mutable state.
+# Match harness-env.ps1: share packages and their locks by host OS/architecture.
 HANDY_ROOT=$(pwd -P)
 HANDY_COMMON=$(git rev-parse --path-format=absolute --git-common-dir) || return 1
 HANDY_PRIMARY=$(dirname "$HANDY_COMMON")
@@ -14,6 +14,7 @@ case "$(uname -m)" in
     *) echo 'Unsupported build host architecture.' >&2; return 1 ;;
 esac
 export NUGET_PACKAGES="$HANDY_PRIMARY/.harness-cache/$HANDY_OS-$HANDY_ARCH/packages"
+export NUGET_SCRATCH="$HANDY_PRIMARY/.harness-cache/$HANDY_OS-$HANDY_ARCH/scratch"
 export DOTNET_CLI_HOME="$HANDY_ROOT/.harness/dotnet"
 export NUGET_HTTP_CACHE_PATH="$HANDY_ROOT/.harness/nuget-http"
 export NUGET_PLUGINS_CACHE_PATH="$HANDY_ROOT/.harness/nuget-plugins"
@@ -25,7 +26,7 @@ case "${HANDY_MAX_PARALLELISM:-2}" in
     [1-9]|[1-5][0-9]|6[0-4]) HANDY_MAX_PARALLELISM="${HANDY_MAX_PARALLELISM:-2}" ;;
     *) echo 'HANDY_MAX_PARALLELISM must be 1..64.' >&2; return 1 ;;
 esac
-mkdir -p "$NUGET_PACKAGES" "$DOTNET_CLI_HOME" "$NUGET_HTTP_CACHE_PATH" \
+mkdir -p "$NUGET_PACKAGES" "$NUGET_SCRATCH" "$DOTNET_CLI_HOME" "$NUGET_HTTP_CACHE_PATH" \
     "$NUGET_PLUGINS_CACHE_PATH" "$TMPDIR" || return 1
 
 # MTP adds a 46-byte pipe name and slash; macOS permits 103 UTF-8 bytes.

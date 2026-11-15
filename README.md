@@ -475,8 +475,12 @@ Each platform has a publish script that produces a portable archive and an insta
 
 The MSI installer requires [WiX Toolset 6.0.2](https://wixtoolset.org/). One-time setup (the script adds the matching UI extension itself):
 ```powershell
-dotnet tool install --global wix --version 6.0.2
+pwsh ./eng/restore-tools.ps1 -Plan
+pwsh ./eng/restore-tools.ps1
 ```
+
+The pinned tool and extension cache stay under this checkout's ignored
+`.harness/`; existing global tools and persistent PATH are unchanged.
 
 If WiX is not installed, the script still produces the portable zip and skips the MSI; pass `-RequireMsi` to make that an error. A failed MSI build fails the script. The publish also fails if `libmpv-2.dll` is missing, instead of shipping a player that cannot play video. `SHA256SUMS-win-x64.txt` in the selected run lists checksums for its shipped artifacts.
 

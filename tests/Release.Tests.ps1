@@ -2,17 +2,61 @@
 # SDK-free adapter checks. Git source checks and canonical tools are mocked;
 # output containment, receipts, locks, manifests and hashes use real local files.
 $ErrorActionPreference = 'Stop'
-$root = Split-Path $PSScriptRoot -Parent
-$adapter = Join-Path $root 'eng/release.ps1'
+$sourceRoot = Split-Path $PSScriptRoot -Parent
+$root = $sourceRoot
+$adapterSource = Join-Path $sourceRoot 'eng/release.ps1'
 $global:ReleaseRealGit = (Get-Command git -CommandType Application | Select-Object -First 1).Source
+$global:ReleaseOriginalRoot = $sourceRoot
 $global:ReleaseSha = '1' * 40
 $global:ReleaseDirty = $false
 $global:ReleaseFailure = $false
 $global:ReleasePublisherProfile = $null
+$global:ReleasePublisherCompression = $null
+$global:ReleaseEnvironmentHost = [Environment]::MachineName
+$global:ReleaseEnvironmentSdk = '11.0.100'
+$global:ReleaseEnvironmentNativeSha = 'a' * 64
+$global:ReleaseEnvironmentNativeLockSha = 'b' * 64
+$global:ReleaseEnvironmentJobToken = 'validation-job'
+$global:ReleaseChangeEnvironmentDuringValidation = $false
+$global:ReleaseChangeEnvironmentDuringPackaging = $false
 $global:ReleaseGitCalls = 0
 $global:ReleaseCalls = [Collections.Generic.List[object]]::new()
 $fixture = Join-Path $root ('.harness/release-contracts/' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($fixture) | Out-Null
+$root = $fixture
+$global:ReleaseFixtureRoot = $root
+$adapter = Join-Path $root 'eng/release.ps1'
+[IO.Directory]::CreateDirectory((Join-Path $root 'eng')) | Out-Null
+[IO.Directory]::CreateDirectory((Join-Path $root '.harness')) | Out-Null
+Copy-Item -LiteralPath $adapterSource -Destination $adapter
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'harness-env.ps1') -Destination (Join-Path $root 'harness-env.ps1')
+$adapterText = Get-Content -LiteralPath $adapter -Raw
+$adapterTokens = $null
+$adapterErrors = $null
+$adapterAst = [Management.Automation.Language.Parser]::ParseInput($adapterText, [ref]$adapterTokens, [ref]$adapterErrors)
+if ($adapterErrors) { throw "Release adapter source did not parse: $($adapterErrors[0].Message)" }
+$identityFunction = $adapterAst.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-ReleaseEnvironmentIdentity' }, $true)
+if (-not $identityFunction) { throw 'Release adapter environment identity provider was not found.' }
+$mockIdentityFunction = @'
+function Get-ReleaseEnvironmentIdentity {
+    param([string]$RepositoryRoot, [string]$ReleaseTarget)
+    [pscustomobject]@{
+        hostName = $global:ReleaseEnvironmentHost
+        nativeOS = $global:ReleaseEnvironmentOs
+        nativeArchitecture = $global:ReleaseEnvironmentArchitecture
+        processArchitecture = $global:ReleaseEnvironmentArchitecture
+        dotnetSdkVersion = $global:ReleaseEnvironmentSdk
+        nativeDependency = [pscustomobject]@{
+            kind = 'test-native-file'; name = 'libmpv'; version = 'fixture'
+            source = 'test-fixture'; path = 'native/libmpv.fixture'
+            bytes = 128; sha256 = $global:ReleaseEnvironmentNativeSha
+            lockFileSha256 = $global:ReleaseEnvironmentNativeLockSha
+        }
+    }
+}
+'@
+$adapterText = $adapterText.Substring(0, $identityFunction.Extent.StartOffset) + $mockIdentityFunction + $adapterText.Substring($identityFunction.Extent.EndOffset)
+Set-Content -LiteralPath $adapter -Value $adapterText -Encoding utf8
 $target = if ($IsWindows) { 'win-x64' } elseif ($IsMacOS) { 'osx-arm64' } else { 'linux-x64' }
 function Assert([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Must-Fail([scriptblock]$Action, [string]$Message, [string]$ExpectedPattern = '*') {
@@ -21,6 +65,9 @@ function Must-Fail([scriptblock]$Action, [string]$Message, [string]$ExpectedPatt
     Assert $failureObserved $Message
     Assert ($global:ReleaseLastError -like $ExpectedPattern) "$Message Unexpected refusal: $global:ReleaseLastError"
 }
+$targetParts = $target.Split('-')
+$global:ReleaseEnvironmentOs = $targetParts[0]
+$global:ReleaseEnvironmentArchitecture = $targetParts[1]
 function global:git {
     $global:ReleaseGitCalls++
     if ($args[0] -eq 'rev-parse' -and $args[1] -eq 'HEAD') {
@@ -32,11 +79,23 @@ function global:git {
         if ($global:ReleaseDirty) { return ' M preserve-wip.txt' }
         return
     }
-    & $global:ReleaseRealGit @args
+    $realArgs = @($args)
+    if ($realArgs.Count -ge 3 -and $realArgs[0] -eq '-C' -and
+        ([string]$realArgs[1]).StartsWith($global:ReleaseFixtureRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        if ($realArgs -contains 'check-ignore' -and ($realArgs[-1] -like '*unignored-release-output*')) {
+            $global:LASTEXITCODE = 1
+            return
+        }
+        $realArgs[1] = $global:ReleaseOriginalRoot
+    }
+    & $global:ReleaseRealGit @realArgs
 }
 function global:pwsh {
     $global:ReleaseCalls.Add(@($args))
     if ($global:ReleaseFailure) { $global:LASTEXITCODE = 19; return }
+    if (($args -contains './validate.ps1') -and $global:ReleaseChangeEnvironmentDuringValidation) {
+        $global:ReleaseEnvironmentSdk = '11.0.101'
+    }
     if ($args -contains './publish-win.ps1') {
         $destination = New-HandyOutputRoot $env:HANDY_RELEASE_OUTPUT
         foreach ($name in @('HandyPlayer-test-win-x64.zip', 'HandyPlayer-test-win-x64.msi', 'SHA256SUMS-win-x64.txt', 'native-dependency.json')) {
@@ -46,9 +105,11 @@ function global:pwsh {
         $profile = $args[$profileIndex + 1]
         $resultProfile = if ($global:ReleasePublisherProfile) { $global:ReleasePublisherProfile } else { $profile }
         $metadata = @{ schemaVersion=1; packageProfile=$resultProfile; requiredMsi=$true
+            msiCompression=$(if($global:ReleasePublisherCompression){$global:ReleasePublisherCompression}elseif($resultProfile -eq 'Candidate'){'medium'}else{'high'})
             innoStatus=$(if($resultProfile -eq 'Candidate'){'skipped-profile'}else{'unavailable'})
             stageSeconds=@{nativeRestore=0.1;publish=0.1;portable=0.1;zip=0.1;msi=0.1;inno=0;checksums=0.1} }
         Write-Output ('HANDY_PACKAGE_RESULT ' + ($metadata | ConvertTo-Json -Compress -Depth 4))
+        if ($global:ReleaseChangeEnvironmentDuringPackaging) { $global:ReleaseEnvironmentSdk = '11.0.101' }
     }
     $global:LASTEXITCODE = 0
 }
@@ -60,6 +121,7 @@ function global:bash {
         @('HandyPlayer-test-mac-arm64.zip', 'HandyPlayer-test-mac-arm64.dmg')
     } else { @('HandyPlayer-test-linux-x64.tar.gz', 'handyplayer-test-linux-x64.deb') }
     foreach ($name in $names) { [IO.File]::WriteAllText((Join-Path $destination $name), 'mock package; not application output') }
+    if ($global:ReleaseChangeEnvironmentDuringPackaging) { $global:ReleaseEnvironmentSdk = '11.0.101' }
     $global:LASTEXITCODE = 0
 }
 try {
@@ -90,10 +152,14 @@ try {
     foreach ($artifact in $manifest.artifacts) {
         Assert ((Get-FileHash -LiteralPath (Join-Path $root $artifact.path) -Algorithm SHA256).Hash -eq $artifact.sha256) 'Manifest artifact hash is wrong.'
     }
+    $global:ReleaseEnvironmentJobToken = 'package-job'
+    & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory (Join-Path $fixture 'unchanged-environment') | Out-Null
+    Assert ($global:ReleaseCalls.Count -eq 4) 'An unchanged native environment must allow a separate package job.'
+    $global:ReleaseEnvironmentJobToken = 'validation-job'
     Must-Fail { & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $candidate } 'Existing candidate output was reused.' '*already has a package manifest*'
     [IO.File]::AppendAllText((Join-Path $root $manifest.artifacts[0].path), 'tampered')
     Must-Fail { & $adapter -Target $target -Mode upload -ExpectedSha $global:ReleaseSha -OutputDirectory $candidate } 'Changed candidate was accepted for upload.' '*Candidate artifact changed*'
-    Assert ($global:ReleaseCalls.Count -eq 2) 'Refusal invoked a canonical gate.'
+    Assert ($global:ReleaseCalls.Count -eq 4) 'Refusal invoked a canonical gate.'
 
     $failed = Join-Path $fixture 'failed'
     $global:ReleaseFailure = $true
@@ -116,6 +182,53 @@ try {
     $direct = Join-Path $fixture 'direct-package'
     & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $direct | Out-Null
     Assert ($global:ReleaseCalls.Count -eq ($callCount + 2)) 'Direct package must validate once before canonical packaging.'
+
+    foreach ($mutation in @('host', 'sdk', 'native-pin')) {
+        $environmentOutput = Join-Path $fixture "environment-$mutation"
+        & $adapter -Target $target -Mode validate -ExpectedSha $global:ReleaseSha -OutputDirectory $environmentOutput | Out-Null
+        $savedIdentity = @{
+            host = $global:ReleaseEnvironmentHost; sdk = $global:ReleaseEnvironmentSdk
+            nativeSha = $global:ReleaseEnvironmentNativeSha; lockSha = $global:ReleaseEnvironmentNativeLockSha
+        }
+        switch ($mutation) {
+            'host' { $global:ReleaseEnvironmentHost = 'different-release-host' }
+            'sdk' { $global:ReleaseEnvironmentSdk = '11.0.101' }
+            'native-pin' {
+                $global:ReleaseEnvironmentNativeSha = 'c' * 64
+                $global:ReleaseEnvironmentNativeLockSha = 'd' * 64
+            }
+        }
+        $beforeRefusalCalls = $global:ReleaseCalls.Count
+        Must-Fail { & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $environmentOutput } "$mutation environment change reused a validation receipt." '*Native environment identity changed*'
+        Assert ($global:ReleaseCalls.Count -eq $beforeRefusalCalls) "$mutation environment refusal invoked packaging."
+        $global:ReleaseEnvironmentHost = $savedIdentity.host
+        $global:ReleaseEnvironmentSdk = $savedIdentity.sdk
+        $global:ReleaseEnvironmentNativeSha = $savedIdentity.nativeSha
+        $global:ReleaseEnvironmentNativeLockSha = $savedIdentity.lockSha
+    }
+
+    $legacyEnvironment = Join-Path $fixture 'receipt-without-environment'
+    & $adapter -Target $target -Mode validate -ExpectedSha $global:ReleaseSha -OutputDirectory $legacyEnvironment | Out-Null
+    $legacyEnvironmentPath = Join-Path $legacyEnvironment 'validation.json'
+    $legacyEnvironmentReceipt = Get-Content -LiteralPath $legacyEnvironmentPath -Raw | ConvertFrom-Json
+    $legacyEnvironmentReceipt.PSObject.Properties.Remove('environment')
+    $legacyEnvironmentReceipt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $legacyEnvironmentPath
+    Must-Fail { & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $legacyEnvironment } 'Receipt without a native environment identity was reused.' '*no bound native environment identity*'
+
+    $changedDuringValidation = Join-Path $fixture 'environment-changed-during-validation'
+    $global:ReleaseChangeEnvironmentDuringValidation = $true
+    Must-Fail { & $adapter -Target $target -Mode validate -ExpectedSha $global:ReleaseSha -OutputDirectory $changedDuringValidation } 'Environment mutation during validation wrote a passing receipt.' '*Native environment identity changed*'
+    $global:ReleaseChangeEnvironmentDuringValidation = $false
+    $global:ReleaseEnvironmentSdk = '11.0.100'
+    Assert (-not (Test-Path -LiteralPath (Join-Path $changedDuringValidation 'validation.json'))) 'Environment change during validation wrote a receipt.'
+
+    $changedDuringPackaging = Join-Path $fixture 'environment-changed-during-packaging'
+    & $adapter -Target $target -Mode validate -ExpectedSha $global:ReleaseSha -OutputDirectory $changedDuringPackaging | Out-Null
+    $global:ReleaseChangeEnvironmentDuringPackaging = $true
+    Must-Fail { & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $changedDuringPackaging } 'Environment mutation during packaging wrote a candidate manifest.' '*Native environment identity changed*'
+    $global:ReleaseChangeEnvironmentDuringPackaging = $false
+    $global:ReleaseEnvironmentSdk = '11.0.100'
+    Assert (-not (Test-Path -LiteralPath (Join-Path $changedDuringPackaging 'artifact-manifest.json'))) 'Environment change during packaging wrote a candidate manifest.'
 
     if ($IsWindows) {
         $profileMismatch = Join-Path $fixture 'profile-mismatch'
@@ -141,6 +254,9 @@ try {
         $global:ReleasePublisherProfile = 'Full'
         Must-Fail { & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory $badPublisher -PackageProfile Candidate } 'Wrong publisher profile accepted.' '*Publisher result does not match*'
         $global:ReleasePublisherProfile = $null
+        $global:ReleasePublisherCompression = 'high'
+        Must-Fail { & $adapter -Target $target -Mode package -ExpectedSha $global:ReleaseSha -OutputDirectory (Join-Path $fixture 'bad-publisher-compression') -PackageProfile Candidate } 'Wrong publisher compression accepted.' '*Publisher MSI compression*'
+        $global:ReleasePublisherCompression = $null
     }
 
     Must-Fail { New-HandyOutputRoot (Join-Path (Split-Path $root -Parent) 'escaped-release-output') } 'Checkout escape accepted.'

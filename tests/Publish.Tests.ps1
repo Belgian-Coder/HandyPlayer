@@ -28,7 +28,10 @@ function dotnet {
 }
 function wix {
     Write-MockCall ('wix ' + ($args -join ' '))
-    if ($args[0] -eq 'extension') { $global:LASTEXITCODE = 0; return }
+    if ($args[0] -eq 'extension') {
+        $global:LASTEXITCODE = if ($env:HANDY_PUBLISH_TEST_FAILURE -eq 'extension') { 18 } else { 0 }
+        return
+    }
     if ($args[0] -ne 'build') { throw 'Unexpected wix command.' }
     if ($env:HANDY_PUBLISH_TEST_FAILURE -eq 'msi') { $global:LASTEXITCODE = 18; return }
     if ($env:HANDY_PUBLISH_TEST_FAILURE -ne 'msi-missing-output') {
@@ -55,9 +58,10 @@ function Get-Command {
     }
 }
 function Test-Path {
-    param([Parameter(Position=0)][string]$Path)
+    param([Parameter(Position=0)][Alias('LiteralPath')][string]$Path, [string]$PathType)
     if ($Path -like '*Inno Setup*') { Write-MockCall "inno-probe $Path"; return $false }
-    Microsoft.PowerShell.Management\Test-Path -LiteralPath $Path
+    if ($PathType) { Microsoft.PowerShell.Management\Test-Path -LiteralPath $Path -PathType $PathType }
+    else { Microsoft.PowerShell.Management\Test-Path -LiteralPath $Path }
 }
 function Get-FileHash {
     param([Parameter(Position=0)][string]$Path, [string]$Algorithm)
@@ -75,7 +79,7 @@ function Restore-HandyNativeDependency {
 }
 '@
 $runner = @'
-param([string]$Profile, [switch]$RequireMsi, [string]$Failure, [string]$Wix, [string]$Inno)
+param([string]$Profile, [switch]$RequireMsi, [switch]$NoRestore, [string]$Failure, [string]$Wix, [string]$Inno)
 $ErrorActionPreference = 'Stop'
 $env:HANDY_PUBLISH_TEST_FAILURE = $Failure
 $env:HANDY_PUBLISH_TEST_WIX = $Wix
@@ -83,16 +87,18 @@ $env:HANDY_PUBLISH_TEST_INNO = $Inno
 $parameters = @{}
 if ($Profile) { $parameters.PackageProfile = $Profile }
 if ($RequireMsi) { $parameters.RequireMsi = $true }
+if ($NoRestore) { $parameters.NoRestore = $true }
 try { & "$PSScriptRoot/publish-win.ps1" @parameters; exit $LASTEXITCODE }
 catch { Write-Output $_; exit 1 }
 '@
 
 function Invoke-PublisherCase {
-    param([string]$Name, [string]$Profile = '', [switch]$RequireMsi, [string]$Failure = '',
+    param([string]$Name, [string]$Profile = '', [switch]$RequireMsi, [switch]$NoRestore, [string]$Failure = '',
         [string]$Wix = 'yes', [string]$Inno = 'yes', [bool]$Success = $true, [int]$SchemaVersion = 1)
     $directory = Join-Path $fixture $Name
     [IO.Directory]::CreateDirectory((Join-Path $directory 'eng')) | Out-Null
     Copy-Item -LiteralPath $publisher -Destination (Join-Path $directory 'publish-win.ps1')
+    Copy-Item -LiteralPath (Join-Path $root 'eng/Windows-Tools.ps1') -Destination (Join-Path $directory 'eng/Windows-Tools.ps1')
     Set-Content -LiteralPath (Join-Path $directory 'harness-env.ps1') -Value $harnessStub
     Set-Content -LiteralPath (Join-Path $directory 'eng/Native-Dependency.ps1') -Value $nativeStub
     @{ schemaVersion = $SchemaVersion; 'win-x64' = @{ version = 'mock' } } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory 'eng/native-dependencies.json')
@@ -102,6 +108,7 @@ function Invoke-PublisherCase {
     $arguments = @('-NoProfile', '-File', (Join-Path $directory 'runner.ps1'), '-Failure', $Failure, '-Wix', $Wix, '-Inno', $Inno)
     if ($Profile) { $arguments += @('-Profile', $Profile) }
     if ($RequireMsi) { $arguments += '-RequireMsi' }
+    if ($NoRestore) { $arguments += '-NoRestore' }
     $output = @(& $shell @arguments 2>&1 | ForEach-Object { $_.ToString() })
     $exitCode = $LASTEXITCODE
     $output | Set-Content -LiteralPath (Join-Path $directory 'publisher.log')
@@ -118,6 +125,11 @@ function Assert-Metadata($Case, [string]$Profile, [bool]$RequiredMsi, [string]$I
     Assert ($metadata.schemaVersion -eq 1 -and $metadata.packageProfile -ceq $Profile) 'Wrong package result schema/profile.'
     Assert ($metadata.requiredMsi -is [bool] -and $metadata.requiredMsi -eq $RequiredMsi) 'Wrong required MSI metadata.'
     Assert ($metadata.innoStatus -ceq $InnoStatus) 'Wrong Inno status.'
+    $expectedCompression = if ($Profile -eq 'Candidate') { 'medium' } else { 'high' }
+    Assert ($metadata.msiCompression -ceq $expectedCompression) 'Wrong MSI compression profile.'
+    if ($RequiredMsi) {
+        Assert (@($Case.Calls | Where-Object { $_ -like "wix build *-d CabCompression=$expectedCompression *" }).Count -eq 1) 'MSI build did not use its profile compression.'
+    }
     $keys = @('nativeRestore', 'publish', 'portable', 'zip', 'msi', 'inno', 'checksums')
     Assert ((($metadata.stageSeconds.PSObject.Properties.Name | Sort-Object) -join ',') -ceq (($keys | Sort-Object) -join ',')) 'Wrong timing stage keys.'
     foreach ($key in $keys) {
@@ -154,9 +166,15 @@ Assert-Artifacts $candidate $true $false
 Assert (@($candidate.Calls | Where-Object { $_ -match '^(discover iscc|inno-probe |iscc )' }).Count -eq 0) 'Candidate discovered, probed or invoked Inno.'
 Assert (@($candidate.Calls | Where-Object { $_ -like 'wix build *' }).Count -eq 1) 'Candidate did not build MSI.'
 Assert (@($candidate.Calls | Where-Object { $_ -like 'wix extension *' }).Count -eq 1) 'Candidate bypassed WiX extension preparation.'
+Assert (@($candidate.Calls | Where-Object { $_ -eq 'wix extension add -g WixToolset.UI.wixext/6.0.2' }).Count -eq 1) 'Extension restore must use the checkout-owned cache and exact version.'
+Assert (@($candidate.Calls | Where-Object { $_ -like 'wix build *-ext WixToolset.UI.wixext/6.0.2 -ct 2 *' }).Count -eq 1) 'MSI build must load the exact extension and bound cabinet workers.'
 Assert (@($candidate.Calls | Where-Object { $_ -eq 'native-restore' }).Count -eq 1) 'Candidate bypassed native restore.'
 Assert (@($candidate.Calls | Where-Object { $_ -like 'dotnet publish *--self-contained*' }).Count -eq 1) 'Candidate bypassed self-contained publish.'
 Assert (@($candidate.Output | Where-Object { $_ -like '*Skipping setup.exe (Candidate profile*' }).Count -eq 1) 'Candidate skip log missing.'
+
+$reusedRestore = Invoke-PublisherCase 'candidate-no-restore' -Profile Candidate -NoRestore
+Assert (@($reusedRestore.Calls | Where-Object { $_ -match '^dotnet publish .* --no-restore$' }).Count -eq 1) 'NoRestore must remain a single native CLI argument.'
+Assert-Artifacts $reusedRestore $true $false
 
 $missingCandidate = Invoke-PublisherCase 'candidate-wix-missing' -Profile Candidate -Wix no -Success $false
 Assert (@($missingCandidate.Calls | Where-Object { $_ -match '^(discover iscc|inno-probe |iscc )' }).Count -eq 0) 'Missing required MSI reached Inno.'
@@ -170,11 +188,12 @@ Assert-Metadata $unavailable 'Full' $false 'unavailable'
 Assert-Artifacts $unavailable $true $false
 Assert (@($unavailable.Calls | Where-Object { $_ -like 'inno-probe *' }).Count -ge 1) 'Full lost Inno fallback discovery.'
 
-foreach ($failure in @('native', 'publish', 'msi', 'msi-missing-output', 'checksums')) {
+foreach ($failure in @('native', 'publish', 'extension', 'msi', 'msi-missing-output', 'checksums')) {
     $failed = Invoke-PublisherCase "candidate-failure-$failure" -Profile Candidate -Failure $failure -Success $false
     Assert (@($failed.Calls | Where-Object { $_ -match '^(discover iscc|inno-probe |iscc )' }).Count -eq 0) "Failed Candidate reached Inno: $failure"
     if ($failure -eq 'native') { Assert (@($failed.Calls | Where-Object { $_ -like 'dotnet publish *' }).Count -eq 0) 'Native failure did not stop publishing.' }
     if ($failure -eq 'publish') { Assert (@($failed.Calls | Where-Object { $_ -like 'wix *' }).Count -eq 0) 'Publish failure did not stop installers.' }
+    if ($failure -eq 'extension') { Assert (@($failed.Calls | Where-Object { $_ -like 'wix build *' }).Count -eq 0) 'Extension restore failure did not stop MSI build.' }
 }
 foreach ($failure in @('inno', 'inno-missing-output')) {
     $failed = Invoke-PublisherCase "full-failure-$failure" -Failure $failure -Success $false

@@ -17,6 +17,7 @@ param(
 $ErrorActionPreference = "Stop"
 $PackageProfile = if ($PackageProfile -ieq 'Candidate') { 'Candidate' } else { 'Full' }
 $requiredMsi = [bool]($RequireMsi -or $PackageProfile -eq 'Candidate')
+$msiCompression = if ($PackageProfile -eq 'Candidate') { 'medium' } else { 'high' }
 $stageSeconds = [ordered]@{ nativeRestore = 0.0; publish = 0.0; portable = 0.0; zip = 0.0; msi = 0.0; inno = 0.0; checksums = 0.0 }
 function Complete-PackageStage([string]$Name, [Diagnostics.Stopwatch]$Timer) {
     $Timer.Stop()
@@ -26,6 +27,9 @@ function Complete-PackageStage([string]$Name, [Diagnostics.Stopwatch]$Timer) {
 # All paths below are repo-relative; work from any current directory.
 Set-Location $PSScriptRoot
 . "$PSScriptRoot/harness-env.ps1"
+. "$PSScriptRoot/eng/Windows-Tools.ps1"
+$localWix = Get-HandyWixPath -ProjectRoot $PSScriptRoot
+if ($localWix) { $null = Initialize-HandyWindowsToolEnvironment -ProjectRoot $PSScriptRoot }
 
 # Evaluated version from MSBuild (robust against property-group order; no silent fallback).
 $version = (dotnet msbuild src/HandyPlaylistPlayer.App/HandyPlaylistPlayer.App.csproj -getProperty:Version -nologo).Trim()
@@ -62,7 +66,7 @@ Write-Host "Building $appName v$version for Windows x64..." -ForegroundColor Cya
 # All outputs belong to this fresh run; previous releases are retained.
 
 # Publish self-contained. The Media.Mpv project fails this step if libmpv-2.dll is missing.
-$restoreArgs = if ($NoRestore) { @('--no-restore') } else { @() }
+[string[]]$restoreArgs = @(if ($NoRestore) { '--no-restore' })
 $stageTimer = [Diagnostics.Stopwatch]::StartNew()
 dotnet publish src/HandyPlaylistPlayer.App `
     -c $Configuration `
@@ -80,8 +84,7 @@ Complete-PackageStage 'publish' $stageTimer
 
 # Create portable directory
 $stageTimer = [Diagnostics.Stopwatch]::StartNew()
-Copy-Item -Recurse $buildDir $portableDir
-Remove-Item -Recurse -Force $buildDir
+Move-Item -LiteralPath $buildDir -Destination $portableDir
 Complete-PackageStage 'portable' $stageTimer
 
 Write-Host "Creating archive: $zipPath" -ForegroundColor Cyan
@@ -101,23 +104,28 @@ $zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
 Write-Host "  Archive: $zipPath ($zipSize MB)" -ForegroundColor White
 
 # --- MSI installer (requires WiX: dotnet tool install --global wix --version 6.0.2) ---
-$wixCmd = Get-Command wix -ErrorAction SilentlyContinue
+$wixCmd = if ($localWix) { $localWix } else { (Get-Command wix -ErrorAction SilentlyContinue).Source }
 if ($wixCmd) {
     $stageTimer = [Diagnostics.Stopwatch]::StartNew()
     Write-Host ""
     Write-Host "Building MSI installer: $msiPath" -ForegroundColor Cyan
 
-    # Ensure the UI extension is available. WiX prints "already installed" notes on stderr; under Windows
-    # PowerShell 5.1 that would be a terminating error with $ErrorActionPreference = Stop, so relax it here.
+    # WiX's user-cache base is process-local, so -g below still writes only
+    # inside this checkout. Load the exact extension version, not the latest.
+    $env:WIX_EXTENSIONS = Join-Path $PSScriptRoot '.harness/wix'
+    Assert-HandyNoReparseAncestors $env:WIX_EXTENSIONS
     & {
         $ErrorActionPreference = "Continue"
-        wix extension add WixToolset.UI.wixext/6.0.2 2>&1 | Out-Null
+        & $wixCmd extension add -g WixToolset.UI.wixext/6.0.2 2>&1 | Out-Null
     }
+    if ($LASTEXITCODE -ne 0) { throw 'WiX UI extension restore failed.' }
 
-    wix build installer-win.wxs `
+    & $wixCmd build installer-win.wxs `
         -arch x64 `
-        -ext WixToolset.UI.wixext `
+        -ext WixToolset.UI.wixext/6.0.2 `
+        -ct $MaxParallelism `
         -d Version=$version `
+        -d CabCompression=$msiCompression `
         -d SourceDir=$portableDir `
         -o $msiPath
 
@@ -130,12 +138,12 @@ if ($wixCmd) {
     Complete-PackageStage 'msi' $stageTimer
 } elseif ($requiredMsi) {
     Write-Host "WiX not found and MSI is required (PackageProfile=$PackageProfile, RequireMsi=$RequireMsi). Install with:" -ForegroundColor Red
-    Write-Host "  dotnet tool install --global wix --version 6.0.2" -ForegroundColor Red
+    Write-Host "  pwsh ./eng/restore-tools.ps1" -ForegroundColor Red
     exit 1
 } else {
     Write-Host ""
     Write-Host "Skipping MSI (WiX not found). Install with:" -ForegroundColor Yellow
-    Write-Host "  dotnet tool install --global wix --version 6.0.2" -ForegroundColor Yellow
+    Write-Host "  pwsh ./eng/restore-tools.ps1" -ForegroundColor Yellow
 }
 
 # --- setup.exe installer (per-user, optional; requires Inno Setup 6: winget install JRSoftware.InnoSetup) ---
@@ -193,6 +201,7 @@ Write-Output ('HANDY_PACKAGE_RESULT ' + ([ordered]@{
     packageProfile = $PackageProfile
     requiredMsi = $requiredMsi
     innoStatus = $innoStatus
+    msiCompression = $msiCompression
     stageSeconds = $stageSeconds
 } | ConvertTo-Json -Depth 3 -Compress))
 } finally {

@@ -59,6 +59,193 @@ if ($Target -ne "$nativePlatform-$nativeArchitecture" -or $processArchitecture -
 }
 
 . "$root/harness-env.ps1"
+
+function Get-CanonicalNativeFile([string]$Path) {
+    $currentPath = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
+    for ($depth = 0; $depth -lt 32; $depth++) {
+        $item = Get-Item -LiteralPath $currentPath -Force -ErrorAction Stop
+        if ($item.PSIsContainer) { throw "Native dependency path is not a file: $Path" }
+        if (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return $item }
+        $target = $item.ResolveLinkTarget($true)
+        if (-not $target) { throw "Could not resolve native dependency link: $Path" }
+        $currentPath = $target.FullName
+    }
+    throw "Native dependency link chain is too deep: $Path"
+}
+
+function Get-ReleaseEnvironmentIdentity {
+    param([string]$RepositoryRoot, [string]$ReleaseTarget)
+
+    $dotnet = Get-Command dotnet -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $dotnet) { throw 'The resolved .NET SDK is unavailable; install the repository-pinned SDK before validation or receipt reuse.' }
+    $sdkOutput = @(& $dotnet.Source --version 2>&1)
+    $sdkExitCode = $LASTEXITCODE
+    $sdkLines = @($sdkOutput | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($sdkExitCode -ne 0 -or $sdkLines.Count -ne 1) {
+        throw "Could not resolve one .NET SDK version using '$($dotnet.Source) --version'."
+    }
+
+    $dependencyIdentity = $null
+    if ($ReleaseTarget -eq 'win-x64') {
+        $lockPath = Join-Path $RepositoryRoot 'eng/native-dependencies.json'
+        $lockItem = Get-Item -LiteralPath $lockPath -Force -ErrorAction Stop
+        if ($lockItem.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Native dependency lockfile must not be a link.' }
+        $lockSha256 = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+        if ($lock.schemaVersion -ne 1) { throw 'Windows native dependency lockfile schema is unsupported.' }
+        $spec = $lock.PSObject.Properties['win-x64'].Value
+        if (-not $spec -or $spec.name -ne 'libmpv' -or $spec.dllFileName -ne 'libmpv-2.dll' -or
+            $spec.dllSha256 -notmatch '^[0-9a-fA-F]{64}$' -or $spec.destination -notmatch '^src/HandyPlaylistPlayer\.Media\.Mpv/runtimes/win-x64/native/libmpv-2\.dll$') {
+            throw 'Windows native dependency lockfile does not contain the reviewed libmpv pin.'
+        }
+        $relativePath = $spec.destination.Replace('/', [IO.Path]::DirectorySeparatorChar)
+        $nativePath = [IO.Path]::GetFullPath((Join-Path $RepositoryRoot $relativePath))
+        $rootPrefix = [IO.Path]::GetFullPath($RepositoryRoot).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        if (-not $nativePath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Windows native dependency path escaped the checkout.' }
+        $nativeItem = Get-Item -LiteralPath $nativePath -Force -ErrorAction Stop
+        if ($nativeItem.PSIsContainer -or ($nativeItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Windows native dependency must be a regular file.' }
+        $nativeSha256 = (Get-FileHash -LiteralPath $nativePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($nativeSha256 -ne $spec.dllSha256.ToLowerInvariant() -or $nativeItem.Length -ne [long]$spec.dllBytes) {
+            throw 'Windows native libmpv file does not match the reviewed eng/native-dependencies.json pin.'
+        }
+        $dependencyIdentity = [ordered]@{
+            kind = 'reviewed-repository-pin'; name = [string]$spec.name; version = [string]$spec.version
+            source = 'eng/native-dependencies.json'; path = $spec.destination
+            bytes = [long]$nativeItem.Length; sha256 = $nativeSha256; lockFileSha256 = $lockSha256
+        }
+    } elseif ($ReleaseTarget -eq 'osx-arm64') {
+        $runtimePath = Join-Path $RepositoryRoot 'src/HandyPlaylistPlayer.Media.Mpv/runtimes/osx-arm64/native/libmpv.2.dylib'
+        $brewLib = $null
+        $brew = Get-Command brew -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($brew) {
+            $brewPrefixOutput = @(& $brew.Source --prefix 2>$null)
+            $brewExitCode = $LASTEXITCODE
+            $brewPrefixLines = @($brewPrefixOutput | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+            if ($brewExitCode -eq 0 -and $brewPrefixLines.Count -eq 1) {
+                $candidate = Join-Path $brewPrefixLines[0] 'lib/libmpv.2.dylib'
+                if (Test-Path -LiteralPath $candidate -PathType Leaf) { $brewLib = $candidate }
+            }
+        }
+        # publish-mac.sh copies this Homebrew file over the app's RID copy when
+        # available; otherwise the RID copy is the app-local resolver's first hit.
+        if ($brewLib) {
+            $nativePath = $brewLib
+            $nativeSource = 'homebrew-mpv'
+        } elseif (Test-Path -LiteralPath $runtimePath -PathType Leaf) {
+            $nativePath = $runtimePath
+            $nativeSource = 'repository-runtime'
+        } else {
+            # MpvInterop explicitly searches these directories after app-local lookup.
+            $nativePath = $null
+            foreach ($directory in @('/opt/homebrew/lib', '/usr/local/lib')) {
+                foreach ($name in @('libmpv.2.dylib', 'libmpv.dylib')) {
+                    $candidate = Join-Path $directory $name
+                    if (Test-Path -LiteralPath $candidate -PathType Leaf) { $nativePath = $candidate; break }
+                }
+                if ($nativePath) { break }
+            }
+            if (-not $nativePath) { throw 'Could not identify libmpv for macOS: no publisher Homebrew library, repository runtime copy, or MpvInterop resolver path was found.' }
+            $nativeSource = 'system-resolver-path'
+        }
+        $nativeItem = Get-CanonicalNativeFile $nativePath
+        $resolvedPath = $nativeItem.FullName
+        $nativeSha256 = (Get-FileHash -LiteralPath $resolvedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $dependencyIdentity = [ordered]@{
+            kind = $nativeSource; name = 'libmpv'; version = $null; source = $nativeSource
+            path = $resolvedPath; bytes = [long]$nativeItem.Length; sha256 = $nativeSha256; lockFileSha256 = $null
+        }
+    } else {
+        $runtimePath = Join-Path $RepositoryRoot 'src/HandyPlaylistPlayer.Media.Mpv/runtimes/linux-x64/native/libmpv.so.2'
+        $nativePath = if (Test-Path -LiteralPath $runtimePath -PathType Leaf) { $runtimePath } else { $null }
+        $nativeSource = 'repository-runtime'
+        if (-not $nativePath) {
+            $ldconfig = Get-Command ldconfig -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($ldconfig) {
+                $ldconfigOutput = @(& $ldconfig.Source -p 2>$null)
+                if ($LASTEXITCODE -eq 0) {
+                    foreach ($line in $ldconfigOutput) {
+                        if ([string]$line -match '^\s*libmpv\.so\.2\s+\([^)]*\)\s+=>\s+(.+?)\s*$') {
+                            $candidate = $Matches[1]
+                            if (Test-Path -LiteralPath $candidate -PathType Leaf) { $nativePath = $candidate; break }
+                        }
+                    }
+                }
+            }
+            if (-not $nativePath) {
+                foreach ($directory in @('/lib/x86_64-linux-gnu', '/usr/lib/x86_64-linux-gnu', '/usr/local/lib', '/lib', '/usr/lib')) {
+                    $candidate = Join-Path $directory 'libmpv.so.2'
+                    if (Test-Path -LiteralPath $candidate -PathType Leaf) { $nativePath = $candidate; break }
+                }
+            }
+            if (-not $nativePath) { throw 'Could not identify libmpv for Linux: no RID runtime copy or concrete system library path was found.' }
+            $nativeSource = 'system-resolver-path'
+        }
+        $nativeItem = Get-CanonicalNativeFile $nativePath
+        $resolvedPath = $nativeItem.FullName
+        $nativeSha256 = (Get-FileHash -LiteralPath $resolvedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $dependencyIdentity = [ordered]@{
+            kind = $nativeSource; name = 'libmpv'; version = $null; source = $nativeSource
+            path = $resolvedPath; bytes = [long]$nativeItem.Length; sha256 = $nativeSha256; lockFileSha256 = $null
+        }
+    }
+
+    [ordered]@{
+        hostName = [Environment]::MachineName
+        nativeOS = $nativePlatform
+        nativeArchitecture = $nativeArchitecture
+        processArchitecture = $processArchitecture
+        dotnetSdkVersion = $sdkLines[0]
+        nativeDependency = $dependencyIdentity
+    }
+}
+
+function Get-ReleaseEnvironmentFingerprint([object]$Identity) {
+    if ($null -eq $Identity -or $null -eq $Identity.nativeDependency) { return $null }
+    $dependency = $Identity.nativeDependency
+    foreach ($field in @('hostName', 'nativeOS', 'nativeArchitecture', 'processArchitecture', 'dotnetSdkVersion')) {
+        if ($null -eq $Identity.$field -or [string]::IsNullOrWhiteSpace([string]$Identity.$field)) { return $null }
+    }
+    foreach ($field in @('kind', 'name', 'source', 'path', 'sha256')) {
+        if ($null -eq $dependency.$field -or [string]::IsNullOrWhiteSpace([string]$dependency.$field)) { return $null }
+    }
+    $dependencyFields = @('kind', 'name', 'version', 'source', 'path', 'bytes', 'sha256', 'lockFileSha256')
+    foreach ($field in $dependencyFields) {
+        $hasField = if ($dependency -is [Collections.IDictionary]) { $dependency.Contains($field) } else { $null -ne $dependency.PSObject.Properties[$field] }
+        if (-not $hasField) { return $null }
+    }
+    if ([long]$dependency.bytes -le 0) { return $null }
+    if ([string]$dependency.sha256 -notmatch '^[0-9a-fA-F]{64}$' -or
+        ($null -ne $dependency.lockFileSha256 -and [string]$dependency.lockFileSha256 -notmatch '^[0-9a-fA-F]{64}$')) { return $null }
+    [ordered]@{
+        hostName = [string]$Identity.hostName
+        nativeOS = [string]$Identity.nativeOS
+        nativeArchitecture = [string]$Identity.nativeArchitecture
+        processArchitecture = [string]$Identity.processArchitecture
+        dotnetSdkVersion = [string]$Identity.dotnetSdkVersion
+        nativeDependency = [ordered]@{
+            kind = [string]$dependency.kind; name = [string]$dependency.name
+            version = if ($null -eq $dependency.version) { $null } else { [string]$dependency.version }
+            source = [string]$dependency.source; path = [string]$dependency.path
+            bytes = [long]$dependency.bytes; sha256 = ([string]$dependency.sha256).ToLowerInvariant()
+            lockFileSha256 = if ($null -eq $dependency.lockFileSha256) { $null } else { ([string]$dependency.lockFileSha256).ToLowerInvariant() }
+        }
+    } | ConvertTo-Json -Compress -Depth 6
+}
+
+function Assert-ReleaseEnvironmentMatches([object]$Expected, [object]$Actual, [string]$Context) {
+    $expectedFingerprint = Get-ReleaseEnvironmentFingerprint $Expected
+    $actualFingerprint = Get-ReleaseEnvironmentFingerprint $Actual
+    if (-not $expectedFingerprint) {
+        throw 'Validation receipt has no bound native environment identity; validate a fresh request output.'
+    }
+    if (-not $actualFingerprint -or $expectedFingerprint -cne $actualFingerprint) {
+        throw "Native environment identity changed or does not match the validation receipt $Context."
+    }
+}
+
+$environmentIdentity = Get-ReleaseEnvironmentIdentity $root $Target
+if (-not (Get-ReleaseEnvironmentFingerprint $environmentIdentity)) { throw 'Native environment identity is incomplete.' }
+
 $lock = $null
 try {
     # Direct callers share this checkout lock; the request client also locks its remote job.
@@ -91,10 +278,14 @@ try {
     if ($Mode -eq 'validate' -or -not (Test-Path -LiteralPath $receiptPath)) {
         if (Test-Path -LiteralPath $receiptPath) { throw 'Validation evidence already exists; choose a fresh request output.' }
         Invoke-Gate $validation 'validation.log'
+        $postValidationEnvironment = Get-ReleaseEnvironmentIdentity $root $Target
+        Assert-ReleaseEnvironmentMatches $environmentIdentity $postValidationEnvironment 'after validation'
+        $environmentIdentity = $postValidationEnvironment
         [ordered]@{
             schemaVersion = 1; project = 'HandyPlayer'; sourceSha = $ExpectedSha.ToLowerInvariant()
             target = $Target; configuration = 'Release'; checkout = $root; status = 'passed'
             packageProfile = $PackageProfile
+            environment = $environmentIdentity
             command = $validation; completedUtc = [DateTime]::UtcNow.ToString('o')
             nativeAcceptance = 'not performed'
         } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $receiptPath -Encoding utf8
@@ -108,6 +299,9 @@ try {
         throw 'Validation receipt does not match this exact checkout, commit, target and configuration.'
     }
     if ($receipt.packageProfile -cne $PackageProfile) { throw 'Validation receipt packaging profile does not match this request.' }
+    $currentEnvironment = Get-ReleaseEnvironmentIdentity $root $Target
+    Assert-ReleaseEnvironmentMatches $receipt.environment $currentEnvironment 'for package/upload reuse'
+    $environmentIdentity = $currentEnvironment
 
     $required = switch ($Target) {
         'win-x64' { @('HandyPlayer-*-win-x64.zip', 'HandyPlayer-*-win-x64.msi', 'SHA256SUMS-win-x64.txt', 'native-dependency.json') }
@@ -148,6 +342,8 @@ try {
             @($uploadFiles | Where-Object { [IO.Path]::GetFileName($_.path) -like '*-win-x64-setup.exe' }).Count) {
             throw 'Candidate packaging profile must not contain an Inno EXE.'
         }
+        $currentEnvironment = Get-ReleaseEnvironmentIdentity $root $Target
+        Assert-ReleaseEnvironmentMatches $receipt.environment $currentEnvironment 'before draft upload'
         . "$PSScriptRoot/Publish-Draft.ps1"
         $draft = Invoke-HandyDraftUpload -Repository 'Belgian-Coder/HandyPlayer' -SourceSha $ExpectedSha `
             -Target $Target -Artifacts $uploadFiles -OutputDirectory $output -NativeAcceptance $candidate.nativeAcceptance -PackageProfile $PackageProfile
@@ -160,7 +356,11 @@ try {
     $env:HANDY_NO_RESTORE = '0'
     $env:HANDY_MAX_PARALLELISM = "$MaxParallelism"
     $env:HANDY_RELEASE_OUTPUT = Join-Path $output 'artifacts'
+    $currentEnvironment = Get-ReleaseEnvironmentIdentity $root $Target
+    Assert-ReleaseEnvironmentMatches $receipt.environment $currentEnvironment 'before packaging'
     Invoke-Gate $packaging 'package.log'
+    $currentEnvironment = Get-ReleaseEnvironmentIdentity $root $Target
+    Assert-ReleaseEnvironmentMatches $receipt.environment $currentEnvironment 'after packaging'
     $packageMetadata = $null
     if ($Target -eq 'win-x64') {
         $marker = 'HANDY_PACKAGE_RESULT '
@@ -170,6 +370,10 @@ try {
         if ($packageMetadata.schemaVersion -ne 1 -or $packageMetadata.packageProfile -cne $PackageProfile -or
             $packageMetadata.requiredMsi -isnot [bool] -or -not $packageMetadata.requiredMsi) {
             throw 'Publisher result does not match the requested profile and required MSI gate.'
+        }
+        $expectedCompression = if ($PackageProfile -eq 'Candidate') { 'medium' } else { 'high' }
+        if ($packageMetadata.msiCompression -cne $expectedCompression) {
+            throw 'Publisher MSI compression does not match the requested profile.'
         }
         $stageKeys = @('nativeRestore', 'publish', 'portable', 'zip', 'msi', 'inno', 'checksums')
         if (@($packageMetadata.stageSeconds.PSObject.Properties).Count -ne $stageKeys.Count) { throw 'Publisher stage timings are incomplete.' }
