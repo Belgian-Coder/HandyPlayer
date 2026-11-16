@@ -343,8 +343,10 @@ pwsh ./eng/restore-native.ps1 -ArchivePath <existing-archive.7z>
 
 `eng/native-dependencies.json` pins the non-v3 SourceForge archive, its published
 SHA-256, and the extracted DLL's hash, size and PE x64 architecture. Publishing
-runs this same restore. Matching archives remain warm under the checkout's
-`.harness/native/`; unknown or different existing DLLs fail without replacement.
+runs this same restore. Matching archives stay warm in the validated primary's
+`.harness-cache/windows-x64/native/<sha256>/`; extraction and receipts remain in
+the checkout's `.harness/native/`. Verified legacy downloads can seed the shared
+cache without moving old evidence. Different existing DLLs fail without replacement.
 Use an isolated worktree to evaluate a new pin while preserving an existing runtime.
 
 #### macOS
@@ -421,9 +423,12 @@ with sequential project restores. Use `-MaxParallelism 1` on a busy host.
 These limits apply per invocation; xUnit test-case parallelism remains unchanged.
 See [BUILDING.md](BUILDING.md) for the native host workflow and release boundaries.
 
-The validation/publish entry points keep CLI state, HTTP/plugin caches and
+The validation/publish entry points keep CLI state, plugin caches and
 temporary files under each checkout's ignored `.harness/`. NuGet packages are
-shared under the primary checkout's `.harness-cache/<os>-<arch>/packages`.
+shared under the primary checkout's `.harness-cache/<os>-<arch>/packages`, with
+shared sibling `http/` downloads and `scratch/` coordination locks. Independent
+release clones validate their exact ownership and declared path before using the
+executor's primary-root hint; invalid hints fail before state is created.
 Source `harness-env.ps1` (PowerShell) or `harness-env.sh` (Bash, from the repo root)
 before direct `dotnet` commands. Keep new agent worktrees under `.wt/` on a
 `feature/` branch (preserve existing `.worktrees/` checkouts), and never

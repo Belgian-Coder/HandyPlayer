@@ -6,6 +6,8 @@ $repositoryRoot = Split-Path $PSScriptRoot -Parent
 . (Join-Path $repositoryRoot 'eng/Native-Dependency.ps1')
 $fixtureRoot = Join-Path $repositoryRoot ('.harness/native-tests-' + [guid]::NewGuid().ToString('N'))
 $null = [IO.Directory]::CreateDirectory($fixtureRoot)
+$emptyGit = Join-Path $fixtureRoot 'empty-git-template'
+$null = [IO.Directory]::CreateDirectory($emptyGit)
 $script:caseCount = 0
 $script:archiveBytes = [Text.Encoding]::UTF8.GetBytes('offline-reviewed-archive-fixture')
 $script:dllBytes = [byte[]]::new(512)
@@ -75,14 +77,21 @@ function Invoke-HandyNativeDownload {
     [IO.File]::WriteAllBytes($Path, $script:downloadBytes)
     if ($script:downloadFailure) { throw 'Mock HTTPS download failed; partial evidence retained.' }
 }
+function Invoke-NativeFixtureGit([string]$Directory, [string[]]$Arguments) {
+    $result = Invoke-HandyProjectGit $Directory (@('-c', "init.templateDir=$emptyGit", '-c', "core.hooksPath=$emptyGit",
+        '-c', 'filter.lfs.process=', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.required=false',
+        '-c', 'commit.gpgsign=false', '-c', 'tag.gpgsign=false', '-c', 'core.fsmonitor=false') + $Arguments)
+    if ($result.ExitCode -ne 0) { throw 'Isolated native Git fixture failed.' }
+}
 function New-Checkout([string]$Name) {
     Reset-NativeMock
     $directory = Join-Path $fixtureRoot $Name
     $null = [IO.Directory]::CreateDirectory($directory)
+    Invoke-NativeFixtureGit $directory @('init', '--quiet')
     return $directory
 }
 function Set-WarmArchive([string]$Checkout) {
-    $cache = Join-Path $Checkout ".harness/native/$($script:spec.archiveSha256)"
+    $cache = Join-Path $Checkout ".harness-cache/windows-x64/native/$($script:spec.archiveSha256)"
     $null = [IO.Directory]::CreateDirectory($cache)
     $path = Join-Path $cache $script:spec.archiveFileName
     [IO.File]::WriteAllBytes($path, $script:archiveBytes)
@@ -132,6 +141,48 @@ Case 'warm verified archive reused and final DLL verified' {
     Assert ($script:downloads -eq 0 -and $script:extractCalls -eq 1) 'Warm archive unexpectedly downloaded.'
     Assert-HandyNativeFile (Join-Path $checkout $script:spec.destination) $script:spec.dllBytes $script:spec.dllSha256 -PeX64
     Assert-HandyNativeFile $archive $script:spec.archiveBytes $script:spec.archiveSha256
+}
+Case 'two real independent clones reuse one verified primary archive and isolate extraction' {
+    $primary = New-Checkout 'canonical-archive-primary'
+    $canonicalOrigin = 'https://github.com/Belgian-Coder/HandyPlayer.git'
+    Invoke-NativeFixtureGit $primary @('config', 'remote.origin.url', $canonicalOrigin)
+    $null = [IO.Directory]::CreateDirectory((Join-Path $primary 'eng'))
+    @{ schemaVersion=1; project='HandyPlayer'; worktreeDirectory='.wt'; targets=@{ 'win-x64'=@{}; 'win-x64-second'=@{} } } |
+        ConvertTo-Json -Depth 4 | Set-Content (Join-Path $primary 'eng/release-targets.json')
+    Invoke-NativeFixtureGit $primary @('add', 'eng/release-targets.json')
+    Invoke-NativeFixtureGit $primary @('-c', 'user.name=Cache Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'Native cache fixture')
+    $oldHint = $env:BUILD_RELEASE_PROJECT_ROOT
+    try {
+        $env:BUILD_RELEASE_PROJECT_ROOT = $primary
+        foreach ($target in @('win-x64', 'win-x64-second')) {
+            $checkout = Join-Path $primary ".wt/release-$target"
+            Invoke-NativeFixtureGit $primary @('clone', '--quiet', '--no-hardlinks', "--template=$emptyGit", $primary, $checkout)
+            Invoke-NativeFixtureGit $checkout @('config', 'remote.origin.url', $canonicalOrigin)
+            @{owner='request-release';version=1;project='HandyPlayer';target=$target;root=$primary} |
+                ConvertTo-Json | Set-Content (Join-Path $checkout '.request-release-owner.json')
+            Reset-NativeMock
+            $result = Restore-HandyNativeDependency $checkout $script:spec
+            if ($target -eq 'win-x64') {
+                Assert ($result.sourceKind -ceq 'download' -and $script:downloads -eq 1) 'First clone did not fill the primary archive cache.'
+            } else {
+                Assert ($result.sourceKind -ceq 'warm-cache' -and $script:downloads -eq 0) 'Second clone redownloaded the immutable native archive.'
+            }
+            Assert (@(Get-ChildItem -LiteralPath (Join-Path $checkout '.harness/native') -Filter receipt.json -Recurse).Count -eq 1) 'Extraction/receipt escaped its checkout.'
+            Assert (-not (Test-Path (Join-Path $checkout '.harness-cache/windows-x64/native'))) 'Independent clone created a private archive cache.'
+        }
+        Assert-HandyNativeFile (Join-Path $primary ".harness-cache/windows-x64/native/$($script:spec.archiveSha256)/$($script:spec.archiveFileName)") $script:spec.archiveBytes $script:spec.archiveSha256
+        Assert (-not (Test-Path (Join-Path $primary '.harness/native'))) 'Primary received mutable extraction output.'
+    } finally { $env:BUILD_RELEASE_PROJECT_ROOT = $oldHint }
+}
+Case 'legacy verified archive is imported without moving old evidence' {
+    $checkout = New-Checkout 'legacy-cache'
+    $legacyRoot = Join-Path $checkout ".harness/native/$($script:spec.archiveSha256)"
+    $null = [IO.Directory]::CreateDirectory($legacyRoot)
+    $legacy = Join-Path $legacyRoot $script:spec.archiveFileName
+    [IO.File]::WriteAllBytes($legacy, $script:archiveBytes)
+    $result = Restore-HandyNativeDependency $checkout $script:spec
+    Assert ($result.sourceKind -ceq 'candidate-archive' -and $script:downloads -eq 0) 'Verified legacy download was not reused.'
+    Assert-HandyNativeFile $legacy $script:spec.archiveBytes $script:spec.archiveSha256
 }
 Case 'verified candidate archive copied without mutation' {
     $checkout = New-Checkout 'candidate'

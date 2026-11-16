@@ -28,18 +28,17 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not resolve fixture shared project cache
 $runner = @'
 param([string]$Checkout, [string]$Common, [string]$Barrier, [string]$Ready)
 $ErrorActionPreference='Stop'
-# Model two checkouts with the same Git common directory without creating or
-# editing worktrees in the real project. All other harness code runs unchanged.
-function global:git {
-    if ($args -contains '--git-common-dir') { $global:LASTEXITCODE=0; return $Common }
-    throw 'Unexpected Git call in isolated restore fixture.'
-}
+# Both disposable consumers are inside the same real project. The metadata helper
+# discovers its common root without overriding Git or changing the real index.
 $env:TESTINGPLATFORM_PIPE_DIRECTORY=$null
 $env:BUILD_RELEASE_PROJECT_ROOT=$null
 . (Join-Path $Checkout 'harness-env.ps1')
+if ([IO.Path]::GetFullPath($primaryRoot) -ne [IO.Path]::GetFullPath((Split-Path $Common -Parent))) {
+    throw 'Real project discovery selected a different canonical package owner.'
+}
 [ordered]@{
     packages=$env:NUGET_PACKAGES; scratch=$env:NUGET_SCRATCH
-    cliHome=$env:DOTNET_CLI_HOME; http=$env:NUGET_HTTP_CACHE_PATH; temp=$env:TEMP
+    cliHome=$env:DOTNET_CLI_HOME; http=$env:NUGET_HTTP_CACHE_PATH; temp=$env:TEMP; plugins=$env:NUGET_PLUGINS_CACHE_PATH
 } | ConvertTo-Json | Set-Content (Join-Path $Checkout 'environment.json')
 [IO.File]::WriteAllText($Ready,'ready')
 $limit=[DateTime]::UtcNow.AddSeconds(30)
@@ -60,6 +59,8 @@ try {
         $checkout = Join-Path $fixture "checkout-$index"
         $null = New-Item -ItemType Directory -Path $checkout
         Copy-Item -LiteralPath "$root/harness-env.ps1" -Destination (Join-Path $checkout 'harness-env.ps1')
+        $null = New-Item -ItemType Directory -Path (Join-Path $checkout 'eng')
+        Copy-Item -LiteralPath "$root/eng/Project-Root.ps1" -Destination (Join-Path $checkout 'eng/Project-Root.ps1')
         "<Project Sdk=`"Microsoft.NET.Sdk`"><PropertyGroup><TargetFramework>net11.0</TargetFramework><NuGetAudit>false</NuGetAudit></PropertyGroup><ItemGroup><PackageReference Include=`"$id`" Version=`"1.0.0`" /></ItemGroup></Project>" | Set-Content (Join-Path $checkout 'consumer.csproj')
         $feedXml = [Security.SecurityElement]::Escape($feed)
         "<configuration><packageSources><clear/><add key=`"fixture`" value=`"$feedXml`"/></packageSources></configuration>" | Set-Content (Join-Path $checkout 'NuGet.Config')
@@ -93,7 +94,10 @@ try {
         $envs[0].scratch -ne (Join-Path (Split-Path $envs[0].packages -Parent) 'scratch')) {
         throw 'Consumers of the shared package cache did not share NuGet coordination locks.'
     }
-    foreach ($name in @('cliHome','http','temp')) {
+    if ($envs[0].http -ne $envs[1].http -or $envs[0].http -ne (Join-Path (Split-Path $envs[0].packages -Parent) 'http')) {
+        throw 'Consumers did not reuse the same OS/architecture HTTP download cache.'
+    }
+    foreach ($name in @('cliHome','plugins','temp')) {
         if ($envs[0].$name -eq $envs[1].$name) { throw "Checkout mutable $name was shared." }
     }
     $cached = Join-Path $packageCache '1.0.0'
@@ -105,7 +109,7 @@ try {
         -not (Test-Path -LiteralPath (Join-Path $cached '.nupkg.metadata'))) {
         throw 'Concurrent extraction is incomplete or corrupt.'
     }
-    Write-Output "Two concurrent offline missing-package restores passed with shared NuGet scratch and isolated CLI/HTTP/TEMP. Evidence: $fixture"
+    Write-Output "Two concurrent offline missing-package restores passed with shared package/HTTP/scratch and isolated CLI/plugins/TEMP. Evidence: $fixture"
 } finally {
     foreach ($job in $jobs) {
         if (-not $job.Process.HasExited) { $job.Process.Kill($true); $job.Process.WaitForExit() }

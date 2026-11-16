@@ -50,11 +50,24 @@ other projects separately; these controls do not implement a host scheduler.
 Use `-NoRestore` only after a matching successful restore and `-NoBuild` only
 with current build output. Source `harness-env.ps1` or, from the repository root,
 `harness-env.sh` before direct `dotnet` commands. NuGet packages are shared under
-the primary checkout's `.harness-cache/<os>-<arch>/packages`; `NUGET_SCRATCH`
-coordination locks use the sibling `scratch/` for all consumers of those packages.
-CLI home, HTTP/plugin caches and other temporary files stay under each checkout's
+the primary checkout's `.harness-cache/<os>-<arch>/packages`; HTTP downloads use
+its sibling `http/`, and `NUGET_SCRATCH` locks use `scratch/` for all consumers.
+CLI home, plugin state and other temporary files stay under each checkout's
 `.harness/`.
-Do not share generated output or writable caches between hosts or architectures.
+Independent release clones use the executor's `BUILD_RELEASE_PROJECT_ROOT` only
+after read-only validation of the exact clone owner/project/target/root marker,
+the manifest's declared release path, canonical non-link Git roots and matching
+credential-free origins: each must have exactly one raw local origin value;
+included/global settings, duplicates and control characters cannot establish
+identity. The adapter performs this preflight before output or
+lock creation. Invalid hints fail without creating state or falling back to a
+private cache; dirty primary work remains untouched. Windows native archive
+downloads share `.harness-cache/windows-x64/native/<sha256>/` and a scratch lock;
+extraction, partial attempts, staged DLLs and receipts stay checkout-local.
+Previously verified archives may seed the new cache without moving old evidence.
+Git metadata runs in child environments without inherited `GIT_*` redirection,
+configuration injection or trace outputs; the caller's environment is preserved.
+Do not share generated output or cache state between hosts or architectures.
 MTP's Unix socket paths have a 103-byte UTF-8 limit. For long checkout paths,
 the helpers set `TESTINGPLATFORM_PIPE_DIRECTORY` to a short socket-only directory
 under the primary project's `.harness/i/`. Its fingerprint includes checkout,
@@ -306,7 +319,8 @@ pwsh ./validate.ps1 -Coverage -MaxParallelism 2
 
 The NuGet fixture restores one initially missing, unique package concurrently
 from a local feed into the shared package cache. Both processes use shared
-coordination locks and separate CLI/HTTP/TEMP directories, then verify archive
+package/HTTP caches and coordination locks, with separate CLI/plugin/TEMP state,
+then verify archive
 and extracted bytes. Existing cache entries are never cleared. NuGet documents
 the requirement for shared scratch locks when sharing package caches in its
 [cache guidance](https://learn.microsoft.com/en-us/nuget/consume-packages/managing-the-global-packages-and-cache-folders).

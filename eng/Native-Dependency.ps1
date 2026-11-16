@@ -1,5 +1,6 @@
 #Requires -Version 7
 # Dot-source only. This library restores the reviewed Windows native lock without an SDK.
+. (Join-Path $PSScriptRoot 'Project-Root.ps1')
 
 function Assert-HandyNativeNoLink {
     param([Parameter(Mandatory)][string]$Path)
@@ -237,7 +238,11 @@ function Restore-HandyNativeDependency {
     $destination = Assert-HandyNativeContainedPath $root (Join-Path $root $destinationRelative)
     if ([IO.Path]::GetFileName($destination) -cne $dllName) { throw 'Native destination file name must match the locked DLL.' }
     if ($EvidencePath) { $EvidencePath = Assert-HandyNativeContainedPath $root $EvidencePath }
-    $cacheRoot = Assert-HandyNativeContainedPath $root (Join-Path $root ".harness/native/$($Specification.archiveSha256)")
+    # Validate even when an existing DLL can be reused; no foreign hint may bypass ownership.
+    $cacheProject = Get-HandyCacheProjectRoot $root
+    $cacheRoot = Assert-HandyNativeContainedPath $cacheProject (Join-Path $cacheProject ".harness-cache/windows-x64/native/$($Specification.archiveSha256)")
+    $scratchRoot = Assert-HandyNativeContainedPath $cacheProject (Join-Path $cacheProject '.harness-cache/windows-x64/scratch')
+    $attemptRoot = Assert-HandyNativeContainedPath $root (Join-Path $root ".harness/native/$($Specification.archiveSha256)")
     $receipt = [ordered]@{
         schemaVersion = 1; name = [string]$Specification.name; version = [string]$Specification.version
         architecture = 'win-x64'; sourceUrl = [string]$Specification.sourceUrl; sourcePage = [string]$Specification.sourcePage
@@ -251,11 +256,24 @@ function Restore-HandyNativeDependency {
         if ($EvidencePath) { Write-HandyNativeReceipt $root $EvidencePath $receipt }
         return [pscustomobject]$receipt
     }
-    New-HandyNativeDirectory $root $cacheRoot
-    $attempt = Join-Path $cacheRoot ('attempt-' + [guid]::NewGuid().ToString('N'))
+    New-HandyNativeDirectory $root $attemptRoot
+    $attempt = Join-Path $attemptRoot ('attempt-' + [guid]::NewGuid().ToString('N'))
     New-HandyNativeDirectory $root $attempt
     $stage = 'archive-validation'
+    $cacheLock = $null
     try {
+        New-HandyNativeDirectory $cacheProject $cacheRoot
+        New-HandyNativeDirectory $cacheProject $scratchRoot
+        $lockPath = Join-Path $scratchRoot ("native-$($Specification.archiveSha256).lock")
+        Assert-HandyNativeNoLink $lockPath
+        $lockDeadline = [DateTime]::UtcNow.AddSeconds(60)
+        while (-not $cacheLock) {
+            try { $cacheLock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
+            catch [IO.IOException] {
+                if ([DateTime]::UtcNow -ge $lockDeadline) { throw 'Native archive cache is busy; preserve the owning request and retry after it finishes.' }
+                Start-Sleep -Milliseconds 50
+            }
+        }
         $archive = Join-Path $cacheRoot $archiveName
         Assert-HandyNativeNoLink $archive
         if (Test-Path -LiteralPath $archive) {
@@ -264,7 +282,10 @@ function Restore-HandyNativeDependency {
         } else {
             $partial = Join-Path $attempt ($archiveName + '.partial')
             $candidate = $null
-            foreach ($path in $ArchiveCandidates) {
+            # Reuse old verified download locations without moving their attempts or receipts.
+            $legacy = @((Join-Path $cacheProject ".harness/native/$($Specification.archiveSha256)/$archiveName"),
+                (Join-Path $root ".harness/native/$($Specification.archiveSha256)/$archiveName"))
+            foreach ($path in @($ArchiveCandidates) + $legacy) {
                 if (-not [IO.Path]::IsPathFullyQualified($path)) { throw 'Native archive candidate paths must be absolute.' }
                 Assert-HandyNativeNoLink $path
                 if (-not (Test-Path -LiteralPath $path)) { continue }
@@ -316,5 +337,7 @@ function Restore-HandyNativeDependency {
             dllSha256 = [string]$Specification.dllSha256; destination = $destination }
         Write-HandyNativeReceipt $root (Join-Path $attempt 'failure.json') $failure
         throw
+    } finally {
+        if ($cacheLock) { $cacheLock.Dispose() }
     }
 }
