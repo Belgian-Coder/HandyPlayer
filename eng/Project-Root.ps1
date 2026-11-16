@@ -56,6 +56,7 @@ function Read-HandyProjectJson([string]$Path) {
 function Assert-HandyProjectOwner($Owner, [string[]]$Keys) {
     $actual = @($Owner.PSObject.Properties.Name)
     if ($actual.Count -ne $Keys.Count -or @($actual | Where-Object { $Keys -cnotcontains $_ }).Count -or
+        $Owner.owner -isnot [string] -or $Owner.project -isnot [string] -or
         $Owner.owner -cne 'request-release' -or $Owner.project -cne 'HandyPlayer' -or
         -not ($Owner.version -is [int] -or $Owner.version -is [long]) -or $Owner.version -ne 1) {
         throw 'Build project marker is not owned by this project with the exact identity.'
@@ -108,7 +109,8 @@ function Get-HandyPipeProjectRoot([string]$CheckoutRoot, [string]$DefaultRoot, [
     }
     $owner = Read-HandyProjectJson (Join-Path $checkout '.request-release-owner.json')
     Assert-HandyProjectOwner $owner @('owner', 'version', 'project', 'target', 'root')
-    if ($owner.target -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$' -or
+    if ($owner.target -isnot [string] -or $owner.root -isnot [string] -or
+        $owner.target -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$' -or
         @($manifest.targets.PSObject.Properties.Name) -cnotcontains $owner.target -or $owner.root -cne $hintRoot) {
         throw 'Build project clone marker target/root differs.'
     }

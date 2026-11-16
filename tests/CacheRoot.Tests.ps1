@@ -303,7 +303,9 @@ try {
     $goodOwner = [IO.File]::ReadAllText($cloneOwnerPath)
     $badOwners = @(
         @{ label = 'wrong owner'; extra = @{ owner = 'other' } },
+        @{ label = 'array owner'; extra = @{ owner = @('request-release') } },
         @{ label = 'wrong project'; extra = @{ project = 'Other' } },
+        @{ label = 'array project'; extra = @{ project = @('HandyPlayer') } },
         @{ label = 'wrong version'; extra = @{ version = 2 } },
         @{ label = 'extra clone marker field'; extra = @{ extra = $true } },
         @{ label = 'undeclared target'; extra = @{ target = 'linux-x64' } },
