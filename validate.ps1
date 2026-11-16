@@ -2,7 +2,7 @@
 <#
 .SYNOPSIS
     Single validation entry point for HandyPlayer: restore, build (warnings as errors), and run the hermetic test suite.
-    CI runs exactly this script, so a green local run means a green CI run on the same OS.
+    Run locally on an approved native host; GitHub Actions must never execute validation or builds.
 
 .EXAMPLE
     pwsh ./validate.ps1

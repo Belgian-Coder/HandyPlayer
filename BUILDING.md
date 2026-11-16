@@ -5,6 +5,12 @@ Keep the primary checkout unchanged when using concurrent writers: create a
 `feature/` branch under `.wt/<task>` as described in `AGENTS.md`. Preserve existing
 worktrees, prototypes, ignored data and warm caches.
 
+Validation, tests, builds and CI run only on PC-MARC, WINDOWS11-VM or the ARM64
+Mac. GitHub Actions execution is prohibited, including self-hosted runners and
+manual workflows. Build release artifacts locally and upload them explicitly
+from that local host. GitHub is used for source/review and artifact storage.
+VM/Mac execution requires the coordinator's allocation before starting requests.
+
 | Host | Native work | Acceptance boundary |
 | --- | --- | --- |
 | WINDOWS11-VM | Windows x64 source, validation, Windows packaging | Check SDK, libmpv and installer tools on that host; a VM run does not establish physical device or GPU behavior. |
@@ -13,8 +19,9 @@ worktrees, prototypes, ignored data and warm caches.
 
 These are intended host roles, not a claim that prerequisites or native
 acceptance have passed on each machine. There is no required container lane.
-Linux validation remains in GitHub CI; existing Linux x64 packaging requires a
-Linux host with its documented native prerequisites. Containers cannot establish
+Linux validation and x64 packaging remain available for explicitly requested
+local PC-MARC/WSL work on its Linux filesystem, with the documented native
+prerequisites; do not build from `/mnt/d`. Containers cannot establish
 Windows/macOS UI, media, hardware or installer acceptance.
 
 ## Validate
@@ -28,6 +35,16 @@ pwsh ./tests/Harness.Tests.ps1
 pwsh ./validate.ps1 -Suite Unit -Class '*PlaybackCoordinatorTests' -MaxParallelism 1
 pwsh ./validate.ps1 -Coverage
 ```
+
+The harness contracts followed by `validate.ps1 -Coverage` replace the former
+workflow's useful checks. Run them on each required local native host; one host
+does not reproduce the former three-OS matrix. `harness-env.ps1`/`.sh` retain
+telemetry isolation and canonical warm caches. `Directory.Build.props` defaults
+`ContinuousIntegrationBuild=true` for normalized source paths in local PDBs;
+an explicit MSBuild override is honored without depending on GitHub variables.
+Retain `TestResults/` (TRX and Cobertura) and
+`tests/HandyPlaylistPlayer.UiTests/bin/Release/net11.0/ui-artifacts/` locally with
+their exact source/host provenance. There is no Actions artifact-upload job.
 
 The plan and harness contract checks need no SDK, downloads, native media or
 hardware. They validate command construction and failure propagation, not the
@@ -219,9 +236,9 @@ authentication is a prerequisite failure, never a reason to copy credentials.
 
 Software validation and macOS ad-hoc signature checks do not establish native
 playback/device/installer acceptance, Developer ID signing or notarization.
-Candidate manifests keep those limits explicit. GitHub CI still uploads only
-test evidence, using `actions/upload-artifact` with `contents: read`; the draft
-uploader is an explicit local/remote adapter action, not a new CI workflow.
+Candidate manifests keep those limits explicit. Test evidence stays local;
+the draft uploader runs locally on the selected builder using its existing
+authentication. GitHub Actions must not validate, build, package or upload it.
 The uploader checks draft state before each asset and afterward. GitHub does not
 provide an atomic draft-only asset upload, so another actor must not publish the
 same draft while an upload is running.
@@ -232,8 +249,10 @@ immediately; the uploader never recreates a draft or retries conflicting bytes.
 
 ## Qualified candidate checkpoint (2026-11-15)
 
-These draft artifacts belong to the source revisions below. Later documentation
-commits do not change their provenance or imply another build or test run.
+These are historical results from before the local-only execution policy. Draft
+artifacts belong to the source revisions below. Later documentation/scripts do
+not change their provenance or imply another build or test run; a new source SHA
+requires its own matching release receipts and acceptance.
 Each native software gate passed 317 unit and 9 headless UI tests with zero
 build warnings or errors.
 

@@ -12,6 +12,13 @@ This is a native Avalonia desktop app, not a browser app. Read `TECHNICAL.md`
 for project boundaries and `README.md` for native prerequisites and packaging.
 Keep device, emergency-stop, native-media and signing checks intact.
 
+All validation, tests, builds and CI execute locally on PC-MARC, WINDOWS11-VM
+or the ARM64 Mac. GitHub Actions must never run them, including self-hosted
+runners and manually dispatched workflows. Keep active build/test/validation/
+release entry points out of `.github/workflows/`. GitHub stores source, reviews
+and explicitly uploaded, locally built draft artifacts. VM/Mac execution needs
+the coordinator's native-host allocation; do not launch remote jobs without it.
+
 Use `validate.ps1` as the canonical validation entry point. Start with the
 smallest relevant suite/class, then run the full default gate before release:
 
@@ -21,6 +28,15 @@ pwsh ./validate.ps1 -Suite Unit -Class '*PlaybackCoordinatorTests'
 pwsh ./validate.ps1 -Suite UI
 pwsh ./validate.ps1 -Coverage
 ```
+
+The local replacement for the former workflow is
+`pwsh ./tests/Harness.Tests.ps1`, then `pwsh ./validate.ps1 -Coverage` on the
+selected host. Keep `TestResults/` and headless UI evidence under
+`tests/HandyPlaylistPlayer.UiTests/bin/Release/net11.0/ui-artifacts/` with the
+exact source/host records. A passing run on one host does not qualify another.
+Existing receipts and historical CI results retain their original source SHA;
+changed source, including docs/scripts, needs its own release receipts and must
+not inherit an earlier candidate's acceptance.
 
 `-NoRestore` requires a matching successful restore; `-NoBuild` additionally
 requires current build output. They do not make stale artifacts valid. Class
@@ -112,15 +128,15 @@ Only the integrator runs combined validation once after integration; broaden
 checks for unresolved risk or release requirements. Add regression tests for
 valuable behavior, not trivial changes or tests that mirror implementation.
 Build incrementally once; do not retry with clean builds or repeat restore,
-packaging or full CI without a concrete reason. Documentation-only changes need
-text/reference review and `git diff --check`, not app launches, screenshots,
-builds or routine independent reviews.
+packaging or full validation without a concrete reason. Documentation-only
+changes need text/reference review and `git diff --check`, not app launches,
+screenshots, builds or routine independent reviews.
 
 Do not install automatic development validation, formatting, startup, polling,
 cost-reporting or Stop hooks. Format only explicitly requested owned files while
 no other writer can race the formatter. There are no fixed story quotas, model
 lanes, review counts, time/cost reports or mandatory cleanup JSON receipts.
-Full CI is not an automatic per-commit or per-push local requirement.
+Full local validation is not an automatic per-commit or per-push requirement.
 Operational approval, data compatibility, signing, safety and release gates
 remain required. On PC-MARC, machine-managed elevation automatically runs shell
 commands as Administrator in both Codex and Claude Code, independent of project

@@ -404,24 +404,33 @@ dotnet run --project src/HandyPlaylistPlayer.App
 
 ### Run Tests
 
-One command runs exactly what CI runs (restore, build with warnings as errors, unit + headless UI tests):
+All validation, tests, builds and CI run locally on PC-MARC, WINDOWS11-VM or
+the ARM64 Mac. GitHub Actions, including self-hosted and manually dispatched
+workflows, must never execute them. VM/Mac jobs require the coordinator's native
+allocation. Release artifacts are built locally and uploaded from that host.
+
+Run the canonical local contract and software gates:
 
 ```powershell
-pwsh ./validate.ps1            # add -Coverage for a Cobertura report in TestResults/
+pwsh ./tests/Harness.Tests.ps1 # no SDK or application build
+pwsh ./validate.ps1 -Coverage  # restore, warnings-as-errors build, offline tests; TRX + Cobertura
 ```
 
 For focused edits, use `-Suite Unit` or `-Suite UI` and optionally
 `-Class '*PlaybackCoordinatorTests'` (xUnit MTP class glob). `-Plan` prints
 commands without invoking the SDK. `-NoRestore` reuses a matching restore;
 `-NoBuild` reuses current output. The default still validates the full solution
-with warnings as errors and both offline suites on every CI platform. A focused
-run is not the full release gate. Unit tests reference the App, so they still
+with warnings as errors and both offline suites on the selected local host.
+A focused run is not the full release gate. Unit tests reference the App, so they still
 build the native desktop project and its dependencies.
 Empty test selections fail rather than reporting a successful filtered run.
 Validation defaults to two MSBuild workers and two concurrent test modules,
 with sequential project restores. Use `-MaxParallelism 1` on a busy host.
 These limits apply per invocation; xUnit test-case parallelism remains unchanged.
 See [BUILDING.md](BUILDING.md) for the native host workflow and release boundaries.
+Keep `TestResults/` and the UI suite's `bin/Release/net11.0/ui-artifacts/` locally
+with exact source/host provenance. Historical results qualify only their original
+source and host; they do not establish acceptance for changed docs or scripts.
 
 The validation/publish entry points keep CLI state, plugin caches and
 temporary files under each checkout's ignored `.harness/`. NuGet packages are

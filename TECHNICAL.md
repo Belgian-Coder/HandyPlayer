@@ -675,6 +675,11 @@ Fullscreen hides the sidebar and bottom action bar, leaving only the video and a
 
 ### Build
 
+Run builds and tests locally on PC-MARC, WINDOWS11-VM or the ARM64 Mac, with
+the platform's `harness-env.ps1`/`harness-env.sh` initialized as described in
+[BUILDING.md](BUILDING.md). GitHub Actions (hosted, self-hosted or manual) must
+never execute them. VM/Mac execution requires the coordinator's allocation.
+
 ```bash
 dotnet build
 ```
@@ -682,7 +687,8 @@ dotnet build
 ### Run Tests
 
 ```bash
-pwsh ./validate.ps1              # restore + build (-warnaserror) + unit + UI tests; what CI runs. -Coverage adds Cobertura
+pwsh ./tests/Harness.Tests.ps1   # local no-SDK command and containment contracts
+pwsh ./validate.ps1 -Coverage   # local restore + warnings-as-errors build + offline unit/UI; TRX + Cobertura
 dotnet test --project tests/HandyPlaylistPlayer.Tests -c Release --filter-trait "Category=LiveDevice"   # live device (needs HANDY_CONNECTION_KEY)
 ```
 

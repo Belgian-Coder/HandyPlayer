@@ -7,8 +7,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <!-- Normalized source paths in PDBs/stack traces for CI builds (GitHub Actions sets GITHUB_ACTIONS=true). -->
-    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- Normalize source paths for deterministic local builds; honor an explicit MSBuild override. -->
+    <ContinuousIntegrationBuild Condition="'$(ContinuousIntegrationBuild)' == ''">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <!-- .NET 11 runtime async: async methods are implemented by the runtime instead of compiler-generated state machines.
