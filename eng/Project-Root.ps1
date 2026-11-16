@@ -63,10 +63,52 @@ function Assert-HandyProjectOwner($Owner, [string[]]$Keys) {
     }
 }
 
+function Invoke-HandyProjectGit([string]$Root, [string[]]$Arguments) {
+    $start = [Diagnostics.ProcessStartInfo]::new((Get-Command git -CommandType Application | Select-Object -First 1).Source)
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    # Redirection, config injection and trace outputs must not influence discovery.
+    # This is a child copy; the caller's environment remains unchanged.
+    foreach ($name in @($start.Environment.Keys)) {
+        if ($name.StartsWith('GIT_', [StringComparison]::OrdinalIgnoreCase)) { $null = $start.Environment.Remove($name) }
+    }
+    $start.Environment['GIT_OPTIONAL_LOCKS'] = '0'
+    $start.Environment['GIT_TERMINAL_PROMPT'] = '0'
+    foreach ($argument in @('--no-optional-locks', '-C', $Root) + $Arguments) { $start.ArgumentList.Add($argument) }
+    $process = [Diagnostics.Process]::Start($start)
+    $errors = $process.StandardError.ReadToEndAsync()
+    $buffer = [IO.MemoryStream]::new()
+    try {
+        $process.StandardOutput.BaseStream.CopyTo($buffer)
+        $process.WaitForExit()
+        $null = $errors.GetAwaiter().GetResult()
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; Bytes = $buffer.ToArray() }
+    } finally { $buffer.Dispose(); $process.Dispose() }
+}
+
 function Get-HandyProjectGitValue([string]$Root, [string[]]$Arguments) {
-    $value = & git --no-optional-locks -C $Root @Arguments 2>$null
-    if ($LASTEXITCODE -ne 0 -or @($value).Count -ne 1) { throw 'Build project Git metadata could not be read.' }
-    return [string]$value
+    $result = Invoke-HandyProjectGit $Root $Arguments
+    $text = [Text.UTF8Encoding]::new($false, $true).GetString($result.Bytes)
+    if ($result.ExitCode -ne 0 -or -not $text.EndsWith("`n")) { throw 'Build project Git metadata could not be read.' }
+    $value = $text.Substring(0, $text.Length - 1)
+    if ($value.EndsWith("`r")) { $value = $value.Substring(0, $value.Length - 1) }
+    if ($value.Contains("`n")) { throw 'Build project Git metadata must contain one value.' }
+    return $value
+}
+
+function Get-HandyProjectOrigin([string]$Root) {
+    # Preserve raw bytes; no line decoding or trimming of origin values.
+    $result = Invoke-HandyProjectGit $Root @('config', '--local', '--no-includes', '--null', '--get-all', 'remote.origin.url')
+    $bytes = $result.Bytes
+    if ($result.ExitCode -ne 0 -or $bytes.Length -lt 2 -or $bytes[-1] -ne 0 -or
+        @($bytes | Where-Object { $_ -eq 0 }).Count -ne 1) {
+        throw 'Build project origin requires exactly one local, non-included NUL-terminated value.'
+    }
+    $origin = [Text.UTF8Encoding]::new($false, $true).GetString($bytes, 0, $bytes.Length - 1)
+    if (-not (Test-HandyCredentialFreeOrigin $origin)) { throw 'Build project origin must be credential-free without control characters.' }
+    return $origin
 }
 
 function Test-HandyCredentialFreeOrigin([string]$Origin) {
@@ -99,7 +141,7 @@ function Get-HandyPipeProjectRoot([string]$CheckoutRoot, [string]$DefaultRoot, [
     $null = Assert-HandyProjectDirectory (Join-Path $checkout '.git')
     $manifest = Read-HandyProjectJson (Join-Path $checkout 'eng/release-targets.json')
     if (-not ($manifest.schemaVersion -is [int] -or $manifest.schemaVersion -is [long]) -or
-        $manifest.schemaVersion -ne 1 -or $manifest.project -cne 'HandyPlayer' -or
+        $manifest.schemaVersion -ne 1 -or $manifest.project -isnot [string] -or $manifest.project -cne 'HandyPlayer' -or
         $manifest.worktreeDirectory -isnot [string] -or $manifest.targets -isnot [pscustomobject] -or
         @($manifest.targets.PSObject.Properties).Count -eq 0) { throw 'Build project manifest identity differs.' }
     $worktrees = [string]$manifest.worktreeDirectory
@@ -120,10 +162,9 @@ function Get-HandyPipeProjectRoot([string]$CheckoutRoot, [string]$DefaultRoot, [
     if (Get-Item -LiteralPath $outerMarker -Force -ErrorAction SilentlyContinue) {
         Assert-HandyProjectOwner (Read-HandyProjectJson $outerMarker) @('owner', 'version', 'project')
     }
-    $hintOrigin = Get-HandyProjectGitValue $hintRoot @('config', '--get', 'remote.origin.url')
-    $checkoutOrigin = Get-HandyProjectGitValue $checkout @('config', '--get', 'remote.origin.url')
-    if (-not (Test-HandyCredentialFreeOrigin $hintOrigin) -or -not (Test-HandyCredentialFreeOrigin $checkoutOrigin) -or
-        $hintOrigin -cne $checkoutOrigin) { throw 'Build project root must have the same credential-free canonical origin as this checkout.' }
+    $hintOrigin = Get-HandyProjectOrigin $hintRoot
+    $checkoutOrigin = Get-HandyProjectOrigin $checkout
+    if ($hintOrigin -cne $checkoutOrigin) { throw 'Build project root must have the same credential-free canonical origin as this checkout.' }
     return $hintRoot
 }
 

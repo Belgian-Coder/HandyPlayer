@@ -78,9 +78,10 @@ function Invoke-HandyNativeDownload {
     if ($script:downloadFailure) { throw 'Mock HTTPS download failed; partial evidence retained.' }
 }
 function Invoke-NativeFixtureGit([string]$Directory, [string[]]$Arguments) {
-    & git -c "init.templateDir=$emptyGit" -c "core.hooksPath=$emptyGit" -c filter.lfs.process= `
-        -c filter.lfs.smudge= -c filter.lfs.required=false -C $Directory @Arguments
-    if ($LASTEXITCODE -ne 0) { throw 'Isolated native Git fixture failed.' }
+    $result = Invoke-HandyProjectGit $Directory (@('-c', "init.templateDir=$emptyGit", '-c', "core.hooksPath=$emptyGit",
+        '-c', 'filter.lfs.process=', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.required=false',
+        '-c', 'commit.gpgsign=false', '-c', 'tag.gpgsign=false', '-c', 'core.fsmonitor=false') + $Arguments)
+    if ($result.ExitCode -ne 0) { throw 'Isolated native Git fixture failed.' }
 }
 function New-Checkout([string]$Name) {
     Reset-NativeMock

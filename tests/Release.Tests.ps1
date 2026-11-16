@@ -5,8 +5,6 @@ $ErrorActionPreference = 'Stop'
 $sourceRoot = Split-Path $PSScriptRoot -Parent
 $root = $sourceRoot
 $adapterSource = Join-Path $sourceRoot 'eng/release.ps1'
-$global:ReleaseRealGit = (Get-Command git -CommandType Application | Select-Object -First 1).Source
-$global:ReleaseOriginalRoot = $sourceRoot
 $global:ReleaseSha = '1' * 40
 $global:ReleaseDirty = $false
 $global:ReleaseFailure = $false
@@ -24,13 +22,39 @@ $global:ReleaseCalls = [Collections.Generic.List[object]]::new()
 $fixture = Join-Path $root ('.harness/release-contracts/' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($fixture) | Out-Null
 $root = $fixture
-$global:ReleaseFixtureRoot = $root
 $adapter = Join-Path $root 'eng/release.ps1'
 [IO.Directory]::CreateDirectory((Join-Path $root 'eng')) | Out-Null
 [IO.Directory]::CreateDirectory((Join-Path $root '.harness')) | Out-Null
 Copy-Item -LiteralPath $adapterSource -Destination $adapter
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'harness-env.ps1') -Destination (Join-Path $root 'harness-env.ps1')
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'eng/Project-Root.ps1') -Destination (Join-Path $root 'eng/Project-Root.ps1')
+# Keep the adapter's Git boundary mocked, as before, in the copied fixture only.
+# Real discovery/ignore reads still run for the fixture's enclosing project.
+$projectHelper = Join-Path $root 'eng/Project-Root.ps1'
+$helperText = Get-Content -LiteralPath $projectHelper -Raw
+$helperTokens = $null; $helperErrors = $null
+$helperAst = [Management.Automation.Language.Parser]::ParseInput($helperText, [ref]$helperTokens, [ref]$helperErrors)
+$gitBoundary = $helperAst.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-HandyProjectGit' }, $true)
+if ($helperErrors -or -not $gitBoundary) { throw 'Git metadata boundary not found in fixture helper.' }
+$realBoundary = $gitBoundary.Extent.Text.Replace('function Invoke-HandyProjectGit', 'function Invoke-ReleaseFixtureRealGit')
+$mockBoundary = @'
+function Invoke-HandyProjectGit([string]$Root, [string[]]$Arguments) {
+    $global:ReleaseGitCalls++
+    if ($Arguments[0] -eq 'rev-parse' -and $Arguments[1] -eq 'HEAD') {
+        return [pscustomobject]@{ ExitCode=0; Bytes=[Text.Encoding]::UTF8.GetBytes($global:ReleaseSha + "`n") }
+    }
+    if ($Arguments[0] -eq 'status') {
+        $bytes = if ($global:ReleaseDirty) { [Text.Encoding]::UTF8.GetBytes(" M preserve-wip.txt`n") } else { [byte[]]@() }
+        return [pscustomobject]@{ ExitCode=0; Bytes=[byte[]]$bytes }
+    }
+    if ($Arguments[0] -eq 'check-ignore' -and $Arguments[-1] -like '*unignored-release-output*') {
+        return [pscustomobject]@{ ExitCode=1; Bytes=[byte[]]@() }
+    }
+    return Invoke-ReleaseFixtureRealGit $Root $Arguments
+}
+'@
+$helperText = $helperText.Substring(0, $gitBoundary.Extent.StartOffset) + $realBoundary + "`n" + $mockBoundary + $helperText.Substring($gitBoundary.Extent.EndOffset)
+$helperText | Set-Content -LiteralPath $projectHelper -Encoding utf8
 $adapterText = Get-Content -LiteralPath $adapter -Raw
 $adapterTokens = $null
 $adapterErrors = $null
@@ -72,29 +96,6 @@ function Must-Fail([scriptblock]$Action, [string]$Message, [string]$ExpectedPatt
 $targetParts = $target.Split('-')
 $global:ReleaseEnvironmentOs = $targetParts[0]
 $global:ReleaseEnvironmentArchitecture = $targetParts[1]
-function global:git {
-    $args = @($args | Where-Object { $_ -ne '--no-optional-locks' })
-    $global:ReleaseGitCalls++
-    if ($args[0] -eq 'rev-parse' -and $args[1] -eq 'HEAD') {
-        $global:LASTEXITCODE = 0
-        return $global:ReleaseSha
-    }
-    if ($args[0] -eq 'status') {
-        $global:LASTEXITCODE = 0
-        if ($global:ReleaseDirty) { return ' M preserve-wip.txt' }
-        return
-    }
-    $realArgs = @($args)
-    if ($realArgs.Count -ge 3 -and $realArgs[0] -eq '-C' -and
-        ([string]$realArgs[1]).StartsWith($global:ReleaseFixtureRoot, [StringComparison]::OrdinalIgnoreCase)) {
-        if ($realArgs -contains 'check-ignore' -and ($realArgs[-1] -like '*unignored-release-output*')) {
-            $global:LASTEXITCODE = 1
-            return
-        }
-        $realArgs[1] = $global:ReleaseOriginalRoot
-    }
-    & $global:ReleaseRealGit @realArgs
-}
 function global:pwsh {
     $global:ReleaseCalls.Add(@($args))
     if ($global:ReleaseFailure) { $global:LASTEXITCODE = 19; return }
@@ -284,5 +285,5 @@ try {
     Assert (-not (Test-Path -LiteralPath (Join-Path $linkTarget 'unsafe'))) 'Redirected output was written.'
     Write-Output 'Release adapter plan, source/host refusals, receipt reuse, hashes, failure evidence and output guards passed (mocked tools).'
 } finally {
-    Remove-Item Function:global:git, Function:global:pwsh, Function:global:bash
+    Remove-Item Function:global:pwsh, Function:global:bash
 }

@@ -90,8 +90,8 @@ function New-HandyOutputRoot([string]$OutputDirectory, [switch]$AllowExisting) {
     if (-not $output.StartsWith($rootPrefix, $comparison)) {
         throw 'Output directory must stay inside this checkout.'
     }
-    & git -C $PSScriptRoot check-ignore --quiet -- $output
-    if ($LASTEXITCODE -ne 0) { throw 'Output directory must be Git-ignored.' }
+    $ignored = Invoke-HandyProjectGit $PSScriptRoot @('check-ignore', '--quiet', '--', $output)
+    if ($ignored.ExitCode -ne 0) { throw 'Output directory must be Git-ignored.' }
     $parent = $PSScriptRoot
     foreach ($part in $output.Substring($rootPrefix.Length).Split([IO.Path]::DirectorySeparatorChar)) {
         $parent = Join-Path $parent $part

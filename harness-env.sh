@@ -1,7 +1,15 @@
 # Source from the repository root, after the caller has changed directory there.
 # Match harness-env.ps1: share packages and their locks by host OS/architecture.
+handy_git_metadata() (
+    local name
+    for name in "${!GIT_@}"; do
+        unset "$name" || return 1
+    done
+    export GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0
+    exec git --no-optional-locks "$@"
+)
 HANDY_ROOT=$(pwd -P)
-HANDY_COMMON=$(git --no-optional-locks rev-parse --path-format=absolute --git-common-dir) || return 1
+HANDY_COMMON=$(handy_git_metadata rev-parse --path-format=absolute --git-common-dir) || return 1
 HANDY_DEFAULT_PRIMARY=$(dirname "$HANDY_COMMON")
 case "$(uname -s)" in
     Darwin) HANDY_OS=macos ;;
@@ -135,7 +143,7 @@ handy_release_begin() {
             parent="$parent/$part"
             [ ! -L "$parent" ] || { echo "Output must not use a symlink: $parent" >&2; return 1; }
         done
-        git check-ignore --quiet -- "$HANDY_RELEASE_OUTPUT" || { echo 'Output must be Git-ignored.' >&2; return 1; }
+        handy_git_metadata check-ignore --quiet -- "$HANDY_RELEASE_OUTPUT" || { echo 'Output must be Git-ignored.' >&2; return 1; }
         [ ! -e "$HANDY_RELEASE_OUTPUT" ] || { echo 'Output already exists; choose a fresh path.' >&2; return 1; }
         mkdir -p "$(dirname "$HANDY_RELEASE_OUTPUT")" || return 1
         mkdir "$HANDY_RELEASE_OUTPUT" || return 1

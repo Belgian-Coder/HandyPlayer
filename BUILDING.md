@@ -57,12 +57,16 @@ CLI home, plugin state and other temporary files stay under each checkout's
 Independent release clones use the executor's `BUILD_RELEASE_PROJECT_ROOT` only
 after read-only validation of the exact clone owner/project/target/root marker,
 the manifest's declared release path, canonical non-link Git roots and matching
-credential-free origins. The adapter performs this preflight before output or
+credential-free origins: each must have exactly one raw local origin value;
+included/global settings, duplicates and control characters cannot establish
+identity. The adapter performs this preflight before output or
 lock creation. Invalid hints fail without creating state or falling back to a
 private cache; dirty primary work remains untouched. Windows native archive
 downloads share `.harness-cache/windows-x64/native/<sha256>/` and a scratch lock;
 extraction, partial attempts, staged DLLs and receipts stay checkout-local.
 Previously verified archives may seed the new cache without moving old evidence.
+Git metadata runs in child environments without inherited `GIT_*` redirection,
+configuration injection or trace outputs; the caller's environment is preserved.
 Do not share generated output or cache state between hosts or architectures.
 MTP's Unix socket paths have a 103-byte UTF-8 limit. For long checkout paths,
 the helpers set `TESTINGPLATFORM_PIPE_DIRECTORY` to a short socket-only directory

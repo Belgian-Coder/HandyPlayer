@@ -47,10 +47,10 @@ if ($Mode -eq 'plan') {
 $null = Get-HandyCacheProjectRoot $root
 Set-Location $root
 function Assert-Source {
-    $actual = & git --no-optional-locks rev-parse HEAD
-    if ($LASTEXITCODE -ne 0 -or $actual -ne $ExpectedSha) { throw 'Checkout HEAD does not match the requested commit.' }
-    $changes = & git --no-optional-locks status --porcelain=v1 --untracked-files=all
-    if ($LASTEXITCODE -ne 0 -or $changes) { throw 'Release adapter requires a clean committed checkout; preserve WIP in its original worktree.' }
+    $actual = Get-HandyProjectGitValue $root @('rev-parse', 'HEAD')
+    if ($actual -ne $ExpectedSha) { throw 'Checkout HEAD does not match the requested commit.' }
+    $changes = Invoke-HandyProjectGit $root @('status', '--porcelain=v1', '--untracked-files=all')
+    if ($changes.ExitCode -ne 0 -or $changes.Bytes.Length -ne 0) { throw 'Release adapter requires a clean committed checkout; preserve WIP in its original worktree.' }
 }
 
 Assert-Source

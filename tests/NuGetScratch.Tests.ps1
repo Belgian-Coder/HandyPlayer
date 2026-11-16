@@ -28,15 +28,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not resolve fixture shared project cache
 $runner = @'
 param([string]$Checkout, [string]$Common, [string]$Barrier, [string]$Ready)
 $ErrorActionPreference='Stop'
-# Model two checkouts with the same Git common directory without creating or
-# editing worktrees in the real project. All other harness code runs unchanged.
-function global:git {
-    if ($args -contains '--git-common-dir') { $global:LASTEXITCODE=0; return $Common }
-    throw 'Unexpected Git call in isolated restore fixture.'
-}
+# Both disposable consumers are inside the same real project. The metadata helper
+# discovers its common root without overriding Git or changing the real index.
 $env:TESTINGPLATFORM_PIPE_DIRECTORY=$null
 $env:BUILD_RELEASE_PROJECT_ROOT=$null
 . (Join-Path $Checkout 'harness-env.ps1')
+if ([IO.Path]::GetFullPath($primaryRoot) -ne [IO.Path]::GetFullPath((Split-Path $Common -Parent))) {
+    throw 'Real project discovery selected a different canonical package owner.'
+}
 [ordered]@{
     packages=$env:NUGET_PACKAGES; scratch=$env:NUGET_SCRATCH
     cliHome=$env:DOTNET_CLI_HOME; http=$env:NUGET_HTTP_CACHE_PATH; temp=$env:TEMP; plugins=$env:NUGET_PLUGINS_CACHE_PATH

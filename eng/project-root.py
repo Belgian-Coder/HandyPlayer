@@ -49,11 +49,18 @@ def canonical_directory(value, label):
 
 
 def git(root, *arguments):
+    child_env = os.environ.copy()
+    for name in tuple(child_env):
+        if name.upper().startswith("GIT_"):
+            del child_env[name]
+    child_env["GIT_OPTIONAL_LOCKS"] = "0"
+    child_env["GIT_TERMINAL_PROMPT"] = "0"
     try:
         result = subprocess.run(
             ["git", "--no-optional-locks", "-C", str(root), *arguments],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=child_env,
             check=False,
         )
     except OSError:
@@ -180,11 +187,10 @@ def credential_free_origin(value):
 
 
 def origin(root):
-    value = git(root, "config", "--get", "remote.origin.url")
-    require(value.endswith(b"\n"), "Credential-free Git origin is required")
+    value = git(root, "config", "--local", "--no-includes", "--null", "--get-all", "remote.origin.url")
+    require(value.endswith(b"\0") and value.count(b"\0") == 1 and len(value) > 1,
+            "Exactly one local, non-included NUL-terminated Git origin is required")
     value = value[:-1]
-    if value.endswith(b"\r"):
-        value = value[:-1]
     try:
         decoded = value.decode("utf-8", "strict")
     except UnicodeError:
