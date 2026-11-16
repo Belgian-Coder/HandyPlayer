@@ -30,6 +30,7 @@ $adapter = Join-Path $root 'eng/release.ps1'
 [IO.Directory]::CreateDirectory((Join-Path $root '.harness')) | Out-Null
 Copy-Item -LiteralPath $adapterSource -Destination $adapter
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'harness-env.ps1') -Destination (Join-Path $root 'harness-env.ps1')
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'eng/Project-Root.ps1') -Destination (Join-Path $root 'eng/Project-Root.ps1')
 $adapterText = Get-Content -LiteralPath $adapter -Raw
 $adapterTokens = $null
 $adapterErrors = $null
@@ -72,6 +73,7 @@ $targetParts = $target.Split('-')
 $global:ReleaseEnvironmentOs = $targetParts[0]
 $global:ReleaseEnvironmentArchitecture = $targetParts[1]
 function global:git {
+    $args = @($args | Where-Object { $_ -ne '--no-optional-locks' })
     $global:ReleaseGitCalls++
     if ($args[0] -eq 'rev-parse' -and $args[1] -eq 'HEAD') {
         $global:LASTEXITCODE = 0

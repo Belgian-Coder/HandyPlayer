@@ -1,23 +1,24 @@
 # Shared environment initialization for the existing validation and release entry points.
 # NuGet packages and their coordination locks share one cache scope. Other
 # mutable state stays in this checkout.
-$commonDir = & git -C $PSScriptRoot rev-parse --path-format=absolute --git-common-dir 2>$null
-if ($LASTEXITCODE -ne 0) { throw 'A Git checkout is required to locate the project cache.' }
-$primaryRoot = Split-Path $commonDir -Parent
+. "$PSScriptRoot/eng/Project-Root.ps1"
+$primaryRoot = Get-HandyCacheProjectRoot $PSScriptRoot
 $platform = if ([Environment]::OSVersion.Platform -eq 'Win32NT') { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' }
 $architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
 $state = Join-Path $PSScriptRoot '.harness'
 $env:NUGET_PACKAGES = Join-Path $primaryRoot ".harness-cache/$platform-$architecture/packages"
 $env:NUGET_SCRATCH = Join-Path $primaryRoot ".harness-cache/$platform-$architecture/scratch"
 $env:DOTNET_CLI_HOME = Join-Path $state 'dotnet'
-$env:NUGET_HTTP_CACHE_PATH = Join-Path $state 'nuget-http'
+$env:NUGET_HTTP_CACHE_PATH = Join-Path $primaryRoot ".harness-cache/$platform-$architecture/http"
 $env:NUGET_PLUGINS_CACHE_PATH = Join-Path $state 'nuget-plugins'
 $env:TEMP = $env:TMP = $env:TMPDIR = Join-Path $state 'tmp'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'
 $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
-foreach ($directory in @($env:NUGET_PACKAGES, $env:NUGET_SCRATCH, $env:DOTNET_CLI_HOME,
-    $env:NUGET_HTTP_CACHE_PATH, $env:NUGET_PLUGINS_CACHE_PATH, $env:TEMP)) {
+$directories = @($env:NUGET_PACKAGES, $env:NUGET_SCRATCH, $env:DOTNET_CLI_HOME,
+    $env:NUGET_HTTP_CACHE_PATH, $env:NUGET_PLUGINS_CACHE_PATH, $env:TEMP)
+foreach ($directory in $directories) { Assert-HandyProjectStateDirectory $directory }
+foreach ($directory in $directories) {
     [IO.Directory]::CreateDirectory($directory) | Out-Null
 }
 
@@ -34,28 +35,6 @@ function Get-HandyPipeDirectory([string]$CheckoutRoot, [string]$PrimaryRoot, [st
         throw 'Project root is too long for Unix test sockets; use a shorter native project root.'
     }
     return [pscustomobject]@{ Path = $short; Fingerprint = $fingerprint }
-}
-
-function Get-HandyPipeProjectRoot([string]$CheckoutRoot, [string]$DefaultRoot, [string]$Hint) {
-    if (-not $Hint) { return $DefaultRoot }
-    if (-not [IO.Path]::IsPathFullyQualified($Hint)) { throw 'Build project root hint must be an absolute owned Git root.' }
-    $hintRoot = [IO.Path]::GetFullPath($Hint).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-    if (-not $CheckoutRoot.StartsWith(($hintRoot + [IO.Path]::DirectorySeparatorChar), $comparison) -and $CheckoutRoot -ne $hintRoot) {
-        throw 'Build project root hint must contain this checkout.'
-    }
-    $marker = Join-Path $hintRoot '.request-release-owner.json'
-    $item = Get-Item -LiteralPath $marker -Force -ErrorAction Stop
-    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Build project owner marker must not be a link.' }
-    $owner = [IO.File]::ReadAllText($marker) | ConvertFrom-Json
-    if (@($owner.PSObject.Properties).Count -ne 3 -or $owner.owner -cne 'request-release' -or
-        $owner.version -ne 1 -or $owner.project -cne 'HandyPlayer') { throw 'Build project root hint is not owned by this project.' }
-    $top = & git -C $hintRoot rev-parse --show-toplevel
-    if ($LASTEXITCODE -ne 0 -or [IO.Path]::GetFullPath($top) -ne $hintRoot) { throw 'Build project root hint is not the exact Git project root.' }
-    $hintOrigin = & git -C $hintRoot config --get remote.origin.url
-    $checkoutOrigin = & git -C $CheckoutRoot config --get remote.origin.url
-    if (-not $hintOrigin -or $hintOrigin -cne $checkoutOrigin) { throw 'Build project root hint must have the same canonical origin as this checkout.' }
-    return $hintRoot
 }
 
 function Initialize-HandyPipeDirectory($Selection) {
@@ -89,8 +68,7 @@ function Initialize-HandyPipeDirectory($Selection) {
 }
 
 if (-not $IsWindows) {
-    $pipeProjectRoot = Get-HandyPipeProjectRoot $PSScriptRoot $primaryRoot $env:BUILD_RELEASE_PROJECT_ROOT
-    $pipeSelection = Get-HandyPipeDirectory $PSScriptRoot $pipeProjectRoot $platform $architecture
+    $pipeSelection = Get-HandyPipeDirectory $PSScriptRoot $primaryRoot $platform $architecture
     if ($env:TESTINGPLATFORM_PIPE_DIRECTORY -and $env:TESTINGPLATFORM_PIPE_DIRECTORY -cne $pipeSelection.Path) {
         $explicit = [IO.Path]::GetFullPath($env:TESTINGPLATFORM_PIPE_DIRECTORY)
         if (-not $explicit.StartsWith(($PSScriptRoot + '/'), [StringComparison]::Ordinal)) {

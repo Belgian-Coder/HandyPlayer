@@ -73,6 +73,7 @@ try {
     Assert ($env:NUGET_SCRATCH -eq (Join-Path (Split-Path $env:NUGET_PACKAGES -Parent) 'scratch')) 'NuGet locks must share the package cache scope.'
     Assert (Test-Path $env:NUGET_SCRATCH) 'Shared NuGet lock directory not initialized.'
     Assert ($env:NUGET_SCRATCH -ne $env:TEMP) 'NuGet coordination locks must not use checkout-local TEMP.'
+    Assert ($env:NUGET_HTTP_CACHE_PATH -eq (Join-Path (Split-Path $env:NUGET_PACKAGES -Parent) 'http')) 'HTTP downloads must share the OS/architecture cache scope.'
 
     $global:HarnessCalls.Clear()
     $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = [NullString]::Value
@@ -86,6 +87,9 @@ try {
         Assert ($LASTEXITCODE -eq 19) "$step failure must preserve exit code and stop later stages."
     }
     $global:LASTEXITCODE = 0
+    $cacheContractShell = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
+    & $cacheContractShell -NoProfile -NonInteractive -File "$root/tests/CacheRoot.Tests.ps1"
+    if ($LASTEXITCODE -ne 0) { throw 'Canonical cache-root contracts failed.' }
     Write-Output 'Harness command, safety-gate, failure and containment checks passed.'
 } finally {
     # Remove only the in-process mock function; no filesystem cleanup occurs.

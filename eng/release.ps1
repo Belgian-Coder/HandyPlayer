@@ -42,11 +42,14 @@ if ($Mode -eq 'plan') {
     exit 0
 }
 
+# Read-only identity preflight must precede source checks and every output/lock/cache write.
+. "$root/eng/Project-Root.ps1"
+$null = Get-HandyCacheProjectRoot $root
 Set-Location $root
 function Assert-Source {
-    $actual = & git rev-parse HEAD
+    $actual = & git --no-optional-locks rev-parse HEAD
     if ($LASTEXITCODE -ne 0 -or $actual -ne $ExpectedSha) { throw 'Checkout HEAD does not match the requested commit.' }
-    $changes = & git status --porcelain=v1 --untracked-files=all
+    $changes = & git --no-optional-locks status --porcelain=v1 --untracked-files=all
     if ($LASTEXITCODE -ne 0 -or $changes) { throw 'Release adapter requires a clean committed checkout; preserve WIP in its original worktree.' }
 }
 

@@ -46,23 +46,5 @@ New-Item -ItemType $linkType -Path $link -Target $owned.Path | Out-Null
 Must-Fail { Initialize-HandyPipeDirectory ([pscustomobject]@{ Path = (Join-Path $link 'unsafe'); Fingerprint = $selected.Fingerprint }) } '*link/junction*'
 Assert (-not (Test-Path -LiteralPath (Join-Path $owned.Path 'unsafe'))) 'Redirected socket output was created.'
 
-# Private, ignored Git fixtures exercise hint provenance without changing real roots.
-$project = Join-Path $fixture 'project'
-$clone = Join-Path $project '.wt/clone'
-[IO.Directory]::CreateDirectory($clone) | Out-Null
-foreach ($gitRoot in @($project, $clone)) {
-    & git -C $gitRoot init --quiet
-    if ($LASTEXITCODE -ne 0) { throw 'Could not initialize private Git fixture.' }
-    & git -C $gitRoot config remote.origin.url 'https://github.com/Belgian-Coder/HandyPlayer.git'
-    if ($LASTEXITCODE -ne 0) { throw 'Could not configure private Git fixture origin.' }
-}
-$projectMarker = Join-Path $project '.request-release-owner.json'
-[IO.File]::WriteAllText($projectMarker, '{"owner":"request-release","version":1,"project":"HandyPlayer"}')
-Assert ((Get-HandyPipeProjectRoot $clone $clone $project) -eq $project) 'Validated outer root hint was not used.'
-& git -C $project config remote.origin.url 'https://github.com/example/unrelated.git'
-Must-Fail { Get-HandyPipeProjectRoot $clone $clone $project } '*same canonical origin*'
-& git -C $project config remote.origin.url 'https://github.com/Belgian-Coder/HandyPlayer.git'
-[IO.File]::WriteAllText($projectMarker, '{"owner":"request-release","version":1,"project":"Unrelated"}')
-Must-Fail { Get-HandyPipeProjectRoot $clone $clone $project } '*not owned by this project*'
-Must-Fail { Get-HandyPipeProjectRoot $root $root $project } '*must contain this checkout*'
-Write-Output 'Unix IPC byte budget, checkout/OS/architecture isolation, owner/link guards and hinted Git-project provenance passed.'
+# Actual primary/linked/independent Git ownership is covered by CacheRoot.Tests.ps1.
+Write-Output 'Unix IPC byte budget, checkout/OS/architecture isolation and owner/link guards passed.'

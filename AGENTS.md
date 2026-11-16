@@ -41,9 +41,9 @@ branch. Preserve unrelated work/index entries/local commits. Keep generated
 files, reports, downloads and scratch work inside this project. Existing
 entry points initialize `harness-env.ps1` / `harness-env.sh`: immutable NuGet
 packages share the primary checkout's `.harness-cache/<os>-<arch>/packages`;
-NuGet coordination locks share its sibling `scratch/` through `NUGET_SCRATCH`.
-All consumers of shared packages must use those same locks. CLI home,
-HTTP/plugin caches and other temporary files use each checkout's ignored
+NuGet HTTP downloads use its sibling `http/`; coordination locks share `scratch/`
+through `NUGET_SCRATCH`. All consumers of shared packages use those same locks.
+CLI home, plugin state and other temporary files use each checkout's ignored
 `.harness/`. `bin`, `obj`, `TestResults`, UI screenshots and `publish` remain
 checkout-local. For direct dotnet commands, source the matching environment
 helper first. Never share `bin`/`obj` between checkouts or operating systems.
@@ -51,8 +51,10 @@ On Unix, long checkout paths use a socket-only fallback under the primary
 project's `.harness/i/<fingerprint>/`, selected by `TESTINGPLATFORM_PIPE_DIRECTORY`.
 Each checkout/OS/architecture has a separate namespace and full owner marker;
 collisions or paths exceeding MTP's 103-byte limit fail without sharing state.
-Independent release clones use the executor's `BUILD_RELEASE_PROJECT_ROOT` hint
-only after checking its Git root, HandyPlayer ownership marker and matching origin.
+Independent release clones validate `BUILD_RELEASE_PROJECT_ROOT` before any state
+write. The clone's exact owner/project/target/root marker, declared release path,
+canonical non-link Git roots and matching credential-free origins bind its caches
+to the primary; invalid hints fail without fallback. Primary WIP is preserved.
 Explicit pipe directories are retained when safe; invalid ones fail clearly.
 
 Use native Windows for Windows UI and installer work. There is no required WSL
@@ -76,6 +78,10 @@ checkout's ignored tools directory. The publisher prefers that tool and isolates
 its extension cache and PATH changes to the current process. Preserve existing
 global tools; never install a machine-wide tool as a build side effect.
 `eng/native-dependencies.json` records the explicit feature candidate baseline.
+Verified archives share `.harness-cache/windows-x64/native/<sha256>/` in that
+primary; download locks use its `scratch/`. Extraction, attempts and receipts
+remain checkout-local under `.harness/native/`. Existing verified legacy archive
+locations can supply the shared cache without moving their evidence.
 Verify archive/DLL hashes, PE architecture and member paths before staging.
 Reuse identical verified caches only; preserve unknown/mismatching targets and
 primary cached runtimes. Do not bypass native-media or required MSI gates.

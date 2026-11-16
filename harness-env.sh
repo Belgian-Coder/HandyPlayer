@@ -1,8 +1,8 @@
 # Source from the repository root, after the caller has changed directory there.
 # Match harness-env.ps1: share packages and their locks by host OS/architecture.
 HANDY_ROOT=$(pwd -P)
-HANDY_COMMON=$(git rev-parse --path-format=absolute --git-common-dir) || return 1
-HANDY_PRIMARY=$(dirname "$HANDY_COMMON")
+HANDY_COMMON=$(git --no-optional-locks rev-parse --path-format=absolute --git-common-dir) || return 1
+HANDY_DEFAULT_PRIMARY=$(dirname "$HANDY_COMMON")
 case "$(uname -s)" in
     Darwin) HANDY_OS=macos ;;
     Linux) HANDY_OS=linux ;;
@@ -13,36 +13,63 @@ case "$(uname -m)" in
     arm64|aarch64) HANDY_ARCH=arm64 ;;
     *) echo 'Unsupported build host architecture.' >&2; return 1 ;;
 esac
+if [ -n "${BUILD_RELEASE_PROJECT_ROOT:-}" ]; then
+    # Validate the external cache root before exporting paths or creating state.
+    HANDY_PRIMARY=$(python3 -I -B "$HANDY_ROOT/eng/project-root.py" \
+        "$HANDY_ROOT" "$HANDY_DEFAULT_PRIMARY" "$BUILD_RELEASE_PROJECT_ROOT") || return 1
+else
+    HANDY_PRIMARY="$HANDY_DEFAULT_PRIMARY"
+fi
+case "${HANDY_MAX_PARALLELISM:-2}" in
+    [1-9]|[1-5][0-9]|6[0-4]) HANDY_MAX_PARALLELISM="${HANDY_MAX_PARALLELISM:-2}" ;;
+    *) echo 'HANDY_MAX_PARALLELISM must be 1..64.' >&2; return 1 ;;
+esac
+
+handy_validate_directory_paths() {
+    local path cursor
+    for path in "$@"; do
+        case "$path" in
+            /*) ;;
+            *) echo 'Harness state paths must be absolute.' >&2; return 1 ;;
+        esac
+        cursor="$path"
+        while :; do
+            if [ -L "$cursor" ]; then
+                echo 'Harness state paths must not use links or reparse points.' >&2
+                return 1
+            fi
+            if [ -e "$cursor" ] && [ ! -d "$cursor" ]; then
+                echo 'Existing harness state path ancestors must be directories.' >&2
+                return 1
+            fi
+            [ "$cursor" = / ] && break
+            cursor=$(dirname "$cursor") || return 1
+        done
+    done
+}
+handy_validate_directory_paths \
+    "$HANDY_PRIMARY/.harness-cache/$HANDY_OS-$HANDY_ARCH/packages" \
+    "$HANDY_PRIMARY/.harness-cache/$HANDY_OS-$HANDY_ARCH/scratch" \
+    "$HANDY_ROOT/.harness/dotnet" \
+    "$HANDY_PRIMARY/.harness-cache/$HANDY_OS-$HANDY_ARCH/http" \
+    "$HANDY_ROOT/.harness/nuget-plugins" \
+    "$HANDY_ROOT/.harness/tmp" || { unset -f handy_validate_directory_paths; return 1; }
+unset -f handy_validate_directory_paths
+
 export NUGET_PACKAGES="$HANDY_PRIMARY/.harness-cache/$HANDY_OS-$HANDY_ARCH/packages"
 export NUGET_SCRATCH="$HANDY_PRIMARY/.harness-cache/$HANDY_OS-$HANDY_ARCH/scratch"
 export DOTNET_CLI_HOME="$HANDY_ROOT/.harness/dotnet"
-export NUGET_HTTP_CACHE_PATH="$HANDY_ROOT/.harness/nuget-http"
+export NUGET_HTTP_CACHE_PATH="$HANDY_PRIMARY/.harness-cache/$HANDY_OS-$HANDY_ARCH/http"
 export NUGET_PLUGINS_CACHE_PATH="$HANDY_ROOT/.harness/nuget-plugins"
 export TMPDIR="$HANDY_ROOT/.harness/tmp"
 export TMP="$TMPDIR" TEMP="$TMPDIR"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 export DOTNET_GENERATE_ASPNET_CERTIFICATE=false
-case "${HANDY_MAX_PARALLELISM:-2}" in
-    [1-9]|[1-5][0-9]|6[0-4]) HANDY_MAX_PARALLELISM="${HANDY_MAX_PARALLELISM:-2}" ;;
-    *) echo 'HANDY_MAX_PARALLELISM must be 1..64.' >&2; return 1 ;;
-esac
 mkdir -p "$NUGET_PACKAGES" "$NUGET_SCRATCH" "$DOTNET_CLI_HOME" "$NUGET_HTTP_CACHE_PATH" \
     "$NUGET_PLUGINS_CACHE_PATH" "$TMPDIR" || return 1
 
 # MTP adds a 46-byte pipe name and slash; macOS permits 103 UTF-8 bytes.
 HANDY_PIPE_PROJECT="$HANDY_PRIMARY"
-if [ -n "${BUILD_RELEASE_PROJECT_ROOT:-}" ]; then
-    # The shared executor supplies its validated outer root for independent clones.
-    # Native Python already hosts that executor; isolate this read-only JSON check.
-    python3 -I -B -c 'import json, pathlib, subprocess, sys
-r=pathlib.Path(sys.argv[1]); c=pathlib.Path(sys.argv[2]); m=r/".request-release-owner.json"
-assert r.is_absolute() and r.resolve()==r and (r==c or r in c.parents), "Invalid build project root hint"
-assert not m.is_symlink() and json.loads(m.read_text())=={"owner":"request-release","version":1,"project":"HandyPlayer"}, "Unrelated build project owner"
-assert pathlib.Path(subprocess.check_output(["git","-C",str(r),"rev-parse","--show-toplevel"],text=True).strip())==r, "Build project hint is not the exact Git root"
-origin=lambda p: subprocess.check_output(["git","-C",str(p),"config","--get","remote.origin.url"],text=True).strip()
-o=origin(r); assert o and o==origin(c), "Build project root must have the same canonical origin as this checkout"' "$BUILD_RELEASE_PROJECT_ROOT" "$HANDY_ROOT" || return 1
-    HANDY_PIPE_PROJECT="$BUILD_RELEASE_PROJECT_ROOT"
-fi
 HANDY_PIPE_DIR="$TMPDIR"
 HANDY_PIPE_HASH=""
 if [ "$(printf '%s' "$HANDY_PIPE_DIR" | LC_ALL=C wc -c | tr -d ' ')" -gt 56 ]; then
