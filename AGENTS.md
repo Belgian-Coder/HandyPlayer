@@ -28,6 +28,11 @@ filters use xUnit MTP syntax, not VSTest `--filter`. Empty selections fail via
 MTP's minimum-test count gate. The unit project references the App, so its build
 still includes Avalonia and all referenced libraries.
 LiveDevice tests require explicit hardware intent and `-IncludeLiveDevice`.
+Validation defaults to two MSBuild workers and two concurrent test modules;
+`-MaxParallelism 1` reduces either limit on a busy host. Restore processes
+projects sequentially. This does not limit xUnit test-case threads or coordinate
+other invocations: run one writer/build per checkout and budget host-wide work
+before starting another project. See `BUILDING.md` for native host boundaries.
 No SDK available: use `-Plan` and PowerShell/Bash parser checks and report that
 application compilation/tests were not run; do not install dependencies.
 
@@ -36,10 +41,19 @@ branch. Preserve unrelated work/index entries/local commits. Keep generated
 files, reports, downloads and scratch work inside this project. Existing
 entry points initialize `harness-env.ps1` / `harness-env.sh`: immutable NuGet
 packages share the primary checkout's `.harness-cache/<os>-<arch>/packages`;
-CLI home, HTTP/plugin caches and temporary files use each checkout's ignored
+NuGet coordination locks share its sibling `scratch/` through `NUGET_SCRATCH`.
+All consumers of shared packages must use those same locks. CLI home,
+HTTP/plugin caches and other temporary files use each checkout's ignored
 `.harness/`. `bin`, `obj`, `TestResults`, UI screenshots and `publish` remain
 checkout-local. For direct dotnet commands, source the matching environment
 helper first. Never share `bin`/`obj` between checkouts or operating systems.
+On Unix, long checkout paths use a socket-only fallback under the primary
+project's `.harness/i/<fingerprint>/`, selected by `TESTINGPLATFORM_PIPE_DIRECTORY`.
+Each checkout/OS/architecture has a separate namespace and full owner marker;
+collisions or paths exceeding MTP's 103-byte limit fail without sharing state.
+Independent release clones use the executor's `BUILD_RELEASE_PROJECT_ROOT` hint
+only after checking its Git root, HandyPlayer ownership marker and matching origin.
+Explicit pipe directories are retained when safe; invalid ones fail clearly.
 
 Use native Windows for Windows UI and installer work. There is no required WSL
 workflow. If Linux work uses WSL, keep its checkout and `.wt` on the
@@ -56,6 +70,28 @@ failures and signature verification still apply. Do not publish/distribute a
 release solely because a filtered local run passed. Releases use a new
 `publish/releases/<rid>/<run>/` directory; retain previous output and failed-run
 evidence. Installer/native prerequisites and signing gates remain required.
+Windows publishing uses `eng/restore-native.ps1`'s locked dependency helper;
+explicit `eng/restore-tools.ps1` restores pinned WiX 6.0.2 only into this
+checkout's ignored tools directory. The publisher prefers that tool and isolates
+its extension cache and PATH changes to the current process. Preserve existing
+global tools; never install a machine-wide tool as a build side effect.
+`eng/native-dependencies.json` records the explicit feature candidate baseline.
+Verify archive/DLL hashes, PE architecture and member paths before staging.
+Reuse identical verified caches only; preserve unknown/mismatching targets and
+primary cached runtimes. Do not bypass native-media or required MSI gates.
+Shared Windows requests default to Candidate (ZIP plus required MSI); Full is
+selectable with `--parameter packageProfile=Full`. The canonical publisher still
+defaults to Full and auto-builds Inno when installed. Profiles must match across
+receipts/manifests/upload; never reuse older-SHA or wrong-profile output. Preserve
+the Full default/high CAB compression, ZIP compression and all native/MSI gates.
+Candidate uses measured medium CAB compression; the installer payload and
+required MSI checks stay identical. See `BUILDING.md` for the size/time tradeoff.
+For coordinated exact-source candidates, use `eng/release.ps1` and the declared
+capabilities in `eng/release-targets.json`; see `BUILDING.md`. Keep request output
+and receipts together. Upload is explicit and draft-only in the existing GitHub
+repository, with machine-local `gh` auth and exact source/artifact hashes. Never
+publish a public release, clobber mismatched assets or claim native acceptance
+from software/headless tests. Keep SSH transport/scheduling in the common client.
 
 ## Development workflow
 

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "win-x64": {
+    "name": "libmpv",
+    "version": "20261108-git-55d3feb45c",
+    "sourceUrl": "https://downloads.sourceforge.net/project/mpv-player-windows/libmpv/mpv-dev-x86_64-20261108-git-55d3feb45c.7z",
+    "sourcePage": "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20261108-git-55d3feb45c.7z/download",
+    "archiveFileName": "mpv-dev-x86_64-20261108-git-55d3feb45c.7z",
+    "archiveSha256": "7c147cb7ceaba717414e782ef4398de728f679db6e86daaa8aeb175670cb7994",
+    "archiveBytes": 31733282,
+    "dllFileName": "libmpv-2.dll",
+    "dllSha256": "cd99c0f06abd0090a4d216f24755aefa2d7cc594b623959dce961dc52333cd46",
+    "dllBytes": 121627648,
+    "peMachine": "0x8664",
+    "destination": "src/HandyPlaylistPlayer.Media.Mpv/runtimes/win-x64/native/libmpv-2.dll"
+  }
+}

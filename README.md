@@ -330,16 +330,22 @@ If you want to use the Intiface/Buttplug backend instead of the direct Handy API
 
 #### Windows
 
-Download `libmpv-2.dll` and place it in the project:
+Restore the reviewed Windows x64 libmpv build with existing PowerShell 7 and 7-Zip:
 
 ```powershell
-# Download from https://sourceforge.net/projects/mpv-player-windows/files/libmpv/
-# Extract and copy the DLL into the project:
-mkdir -p src/HandyPlaylistPlayer.Media.Mpv/runtimes/win-x64/native
-cp libmpv-2.dll src/HandyPlaylistPlayer.Media.Mpv/runtimes/win-x64/native/
+pwsh ./eng/restore-native.ps1 -Plan
+pwsh ./eng/restore-native.ps1
+# Optional verified local archive instead of downloading:
+pwsh ./eng/restore-native.ps1 -ArchivePath <existing-archive.7z>
 ```
 
 > **Tip:** Pre-built releases include libmpv already — this step is only needed for development builds.
+
+`eng/native-dependencies.json` pins the non-v3 SourceForge archive, its published
+SHA-256, and the extracted DLL's hash, size and PE x64 architecture. Publishing
+runs this same restore. Matching archives remain warm under the checkout's
+`.harness/native/`; unknown or different existing DLLs fail without replacement.
+Use an isolated worktree to evaluate a new pin while preserving an existing runtime.
 
 #### macOS
 
@@ -410,12 +416,17 @@ with warnings as errors and both offline suites on every CI platform. A focused
 run is not the full release gate. Unit tests reference the App, so they still
 build the native desktop project and its dependencies.
 Empty test selections fail rather than reporting a successful filtered run.
+Validation defaults to two MSBuild workers and two concurrent test modules,
+with sequential project restores. Use `-MaxParallelism 1` on a busy host.
+These limits apply per invocation; xUnit test-case parallelism remains unchanged.
+See [BUILDING.md](BUILDING.md) for the native host workflow and release boundaries.
 
 The validation/publish entry points keep CLI state, HTTP/plugin caches and
 temporary files under each checkout's ignored `.harness/`. NuGet packages are
 shared under the primary checkout's `.harness-cache/<os>-<arch>/packages`.
 Source `harness-env.ps1` (PowerShell) or `harness-env.sh` (Bash, from the repo root)
-before direct `dotnet` commands. Keep worktrees under `.worktrees/`, and never
+before direct `dotnet` commands. Keep new agent worktrees under `.wt/` on a
+`feature/` branch (preserve existing `.worktrees/` checkouts), and never
 share `bin`/`obj` across checkouts or platforms. For manual app smoke runs, set
 `HANDYPLAYER_DATA_DIR` to a checkout-local `.harness/app-data` folder as well.
 `pwsh ./tests/Harness.Tests.ps1` checks command selection, gates and containment
@@ -429,9 +440,9 @@ still regenerates outputs and retains native-media, installer and signing checks
 Each release writes a fresh `publish/releases/<rid>/<run>/` directory and prints
 the exact artifact paths. Select assets from that run only; previous releases,
 failed-run evidence and warm caches remain intact. Scripts perform an exit cleanup
-checkpoint and remove only staging created by the current successful run. Follow
-the cleanup checkpoint in `AGENTS.md` after every commit/release; inspect ignored
-contents before removing a clean, pushed in-project worktree.
+checkpoint and remove only staging created by the current successful run.
+Inspect ignored contents before removing a clean, pushed in-project worktree;
+preserve unknown data, caches, evidence and recovery branches as `AGENTS.md` requires.
 
 - **Unit tests** (`tests/HandyPlaylistPlayer.Tests`): core logic, plus storage tests against a real SQLite database in a temp file and offline Handy wire-protocol tests.
 - **UI tests** (`tests/HandyPlaylistPlayer.UiTests`): the real app (XAML, view models, database) on Avalonia's headless platform, driven through real controls; only mpv, the device and thumbnails are faked. No display, libmpv or device needed. Screenshots of each step (and of any failure) land in `tests/HandyPlaylistPlayer.UiTests/bin/Release/net11.0/ui-artifacts/`.
@@ -453,6 +464,7 @@ Each platform has a publish script that produces a portable archive and an insta
 
 ```powershell
 ./publish-win.ps1
+./publish-win.ps1 -PackageProfile Candidate  # ZIP + required MSI, skip optional Inno EXE
 ```
 
 **Outputs:**
@@ -463,8 +475,12 @@ Each platform has a publish script that produces a portable archive and an insta
 
 The MSI installer requires [WiX Toolset 6.0.2](https://wixtoolset.org/). One-time setup (the script adds the matching UI extension itself):
 ```powershell
-dotnet tool install --global wix --version 6.0.2
+pwsh ./eng/restore-tools.ps1 -Plan
+pwsh ./eng/restore-tools.ps1
 ```
+
+The pinned tool and extension cache stay under this checkout's ignored
+`.harness/`; existing global tools and persistent PATH are unchanged.
 
 If WiX is not installed, the script still produces the portable zip and skips the MSI; pass `-RequireMsi` to make that an error. A failed MSI build fails the script. The publish also fails if `libmpv-2.dll` is missing, instead of shipping a player that cannot play video. `SHA256SUMS-win-x64.txt` in the selected run lists checksums for its shipped artifacts.
 

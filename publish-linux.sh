@@ -31,6 +31,8 @@ dotnet publish src/HandyPlaylistPlayer.App \
     -c "$CONFIGURATION" \
     -r "$RID" \
     --self-contained \
+    "-maxcpucount:$HANDY_MAX_PARALLELISM" \
+    -p:RestoreDisableParallel=true \
     -o "$PUBLISH_DIR" "${RESTORE_ARGS[@]}"
 
 # Create portable directory structure

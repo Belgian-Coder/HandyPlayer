@@ -15,3 +15,6 @@
 # Windows scripts — always CRLF
 *.ps1 text eol=crlf
 *.wxs text eol=crlf
+
+# Shared release client must match the reviewed Infrastructure source byte-for-byte.
+/eng/request-release.py text eol=lf

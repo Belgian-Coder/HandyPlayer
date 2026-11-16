@@ -25,6 +25,9 @@ param(
     [string]$Class,
     # Use only after a successful restore for this checkout/configuration.
     [switch]$NoRestore,
+    # Bound MSBuild workers and concurrently running test modules per invocation.
+    [ValidateRange(1, 64)]
+    [int]$MaxParallelism = 2,
     # Print the exact command plan without invoking dotnet or creating state.
     [switch]$Plan
 )
@@ -57,14 +60,17 @@ function Invoke-Step([string]$Name, [string[]]$Arguments) {
 }
 
 if (-not $NoBuild) {
-    if (-not $NoRestore) { Invoke-Step 'restore' @('restore', $target, '--nologo') }
-    Invoke-Step 'build' @('build', $target, '-c', $Configuration, '--no-restore', '--nologo', '-warnaserror')
+    if (-not $NoRestore) {
+        Invoke-Step 'restore' @('restore', $target, '--nologo', '--disable-parallel', "-maxcpucount:$MaxParallelism")
+    }
+    Invoke-Step 'build' @('build', $target, '-c', $Configuration, '--no-restore', '--nologo', '-warnaserror', "-maxcpucount:$MaxParallelism")
 }
 
 $testArgs = @(
     'test', $(if ($Suite -eq 'All') { '--solution' } else { '--project' }), $target,
     "-c", $Configuration, "--no-build",
     "--results-directory", $results,
+    '--max-parallel-test-modules', "$MaxParallelism",
     '--minimum-expected-tests', '1',
     "--report-xunit-trx"
 )
