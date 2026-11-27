@@ -16,10 +16,10 @@
 
   <ItemGroup>
     <PackageReference Include="xunit.v3" Version="4.0.3" />
-    <PackageReference Include="coverlet.MTP" Version="10.1.0" />
+    <PackageReference Include="coverlet.MTP" Version="10.1.1" />
     <!-- Not Avalonia.Headless.XUnit: 12.1.6 targets xunit.v3 3.x, so this project hosts its own HeadlessUnitTestSession. -->
-    <PackageReference Include="Avalonia.Headless" Version="12.1.6" />
-    <PackageReference Include="Avalonia.Skia" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Headless" Version="12.2.0" />
+    <PackageReference Include="Avalonia.Skia" Version="12.2.0" />
   </ItemGroup>
 
   <ItemGroup>
